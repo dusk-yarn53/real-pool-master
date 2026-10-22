@@ -1,0 +1,37 @@
+name: Game regression
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  physics-and-input:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check synchronized web entries
+        run: |
+          cmp game.js play/game.js
+          cmp index.html play/index.html
+          cmp startup.js play/startup.js
+          node --check game.js
+      - name: Aim scheduling and touch controls
+        run: |
+          node tests/aim-scheduling-regression.cjs
+          node tests/aim-quality-regression.cjs
+          node tests/controls-input-regression.cjs
+          node tests/spin-editor-regression.cjs
+      - name: Legal attacks and real stroke physics
+        run: |
+          node tests/master-offence-20261020.cjs
+          node tests/master-realism-regression.cjs
+          node tests/guide-physics-regression.cjs
+      - name: Compatibility and loading
+        run: |
+          node tests/deployment-compat-regression.cjs
+          node tests/entry-loading-regression.cjs
