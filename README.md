@@ -1,11 +1,11 @@
-> 2026-10-22 迁移到新账号 `dusk-yarn53`。源码来自 2026-10-20 保存的网站版本；迁移来源、验证范围与发布状态见 [迁移记录](MIGRATION-20261022.md)。下列 GitHub Pages 地址在首次发布成功后生效。
+> 2026-10-22 迁移到新账号 `dusk-yarn53`。源码来自 2026-10-20 保存的网站版本；迁移来源、验证范围与发布状态见 [迁移记录](MIGRATION-20261022.md)。新仓库的 GitHub Pages 已完成首次发布。
 
 ## 开源与访问
 
 本项目原创代码采用 [MIT 许可证](LICENSE)。图片、音乐和音效的许可范围见 [LICENSE-SCOPE.md](LICENSE-SCOPE.md)，各素材的原有声明继续有效。
 
 - GitHub Pages：https://dusk-yarn53.github.io/real-pool-master/
-- 备用网站：https://guangyu-pool-web.liabokary9182.chatgpt.site
+- 备用网站：https://guangyu-pool-renew-20261011.liabokary9182.chatgpt.site
 - 源码：https://github.com/dusk-yarn53/real-pool-master
 
 备用网站保留原版页面、操作与资源。若原网址提示无法打开网页，可尝试备用网址；各网络能否连接仍需实测。
@@ -54,6 +54,8 @@ python3 -m http.server 8765
 部署沿用独立仓库现有 GitHub Pages 配置；更新 `main` 后检查对应的 `pages build and deployment` 工作流成功，再验证线上页面与资源。具体步骤见 [发布记录](DEPLOYMENT.md)。
 
 ## 验证与说明
+
+首次运行包含原生绘图的自动检查前，执行 `npm install --no-save --package-lock=false @napi-rs/canvas@0.1.100`。网页运行不需要安装此开发依赖。
 
 - `node tests/audio-regression.cjs`
 - `node tests/guide-physics-regression.cjs`
