@@ -14,6 +14,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Install raster test dependency
+        run: npm install --no-save --package-lock=false @napi-rs/canvas@0.1.100
       - name: Check synchronized web entries
         run: |
           cmp game.js play/game.js
