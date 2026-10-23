@@ -24,6 +24,8 @@ jobs:
           node --check game.js
       - name: Aim scheduling and touch controls
         run: |
+          node tests/native-drag-cluster-regression.cjs
+          node tests/aim-direction-regression.cjs
           node tests/aim-scheduling-regression.cjs
           node tests/aim-visible-regression.cjs
           node tests/guide-refinement-cushion-regression.cjs
