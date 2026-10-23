@@ -25,6 +25,8 @@ jobs:
       - name: Aim scheduling and touch controls
         run: |
           node tests/aim-scheduling-regression.cjs
+          node tests/aim-visible-regression.cjs
+          node tests/guide-refinement-cushion-regression.cjs
           node tests/aim-quality-regression.cjs
           node tests/controls-input-regression.cjs
           node tests/spin-editor-regression.cjs
@@ -33,6 +35,7 @@ jobs:
           node tests/master-offence-20261020.cjs
           node tests/master-realism-regression.cjs
           node tests/ai-close-position-regression.cjs
+          node tests/near-multirail-regression.cjs
           node tests/guide-physics-regression.cjs
       - name: Compatibility and loading
         run: |

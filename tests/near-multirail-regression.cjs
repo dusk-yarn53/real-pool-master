@@ -1,0 +1,21 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),load=require('./load-game.cjs');
+const source=fs.readFileSync(require('node:path').join(__dirname,'../game.js'),'utf8').replace('window.__poolTest={','window.__near={closePosition,preferClosePlans,ball,state};window.__poolTest={');
+const {window:w}=load({source}),t=w.__near;t.state.mode='nine';t.state.turn=1;t.state.groups=[null,null];
+const layout=(x,y,extras=[])=>({winning:false,pocketed:[],balls:[t.ball(0,x,y),t.ball(2,50,12),t.ball(9,85,35),...extras.map(b=>t.ball(b.n,b.x,b.y))]});
+assert(t.closePosition(layout(50,25)).close);
+assert(!t.closePosition(layout(50,44)).close);
+assert(!t.closePosition(layout(50,15)).close,'crowding is not playable near position');
+assert(!t.closePosition(layout(50,25,[{n:3,x:50,y:20}])).close,'blocked next ball cannot qualify');
+const near={closeLeave:true,score:999},far={closeLeave:false,score:-999};
+assert.equal(t.preferClosePlans([far,near]).length,1);assert.equal(t.preferClosePlans([far,near])[0],near,'score must never let a far leave beat an available close leave');
+assert.equal(t.preferClosePlans([far])[0],far,'impossible close position must not invent a shot');
+(async()=>{
+ w.setTimeout=fn=>setImmediate(fn);w.Math=Object.create(Math);w.Math.random=()=>.5;
+ const out=await w.__poolTest.planAI([{n:0,x:50,y:35},{n:1,x:50,y:12},{n:9,x:80,y:36}],'nine');
+ assert(out.result.safe&&out.result.potted);const pos=t.closePosition(out.result);assert(pos.close,'actual execution must finish with clear close continuation');
+ const rails=out.result.cushionHits.filter(h=>h.n===0&&!h.beforeFirstHit&&!h.jaw).length;
+ assert(rails>=2,'opposite-side position requires actual multi-cushion travel');
+ assert(out.plan.power>=70&&Math.abs(out.plan.spinY)>=.8,'fixture should exercise a strong stroke');
+ assert(out.plan.robustness>=.75&&out.plan.closeRobustness>=.75);
+ console.log(JSON.stringify({passed:true,hardGate:true,actualNearDistance:pos.distance,actualCueRails:rails,power:out.plan.power,spinY:out.plan.spinY,planningMs:out.ms}));
+})().catch(e=>{console.error(e);process.exitCode=1;});
