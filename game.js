@@ -1285,13 +1285,14 @@
     return trimmed;
   }
   let guideJob=null,guideTimerPending=false;
+  function guideDragging(){return state.drag?.kind==='aim'&&state.drag.moved||!!angleDrag;}
   function guideKey(){return [state.mode,state.aim,state.power,state.spinX,state.spinY,state.breaking,...state.balls.flatMap(b=>[b.n,b.x,b.y,b.vx,b.vy,b.rollVx,b.rollVy,b.spin,b.pocketed?1:0])].join(',');}
   function runGuideSlice(){
     guideTimerPending=false;
     const job=guideJob;
-    if(!job||job.key!==guideKey()||state.phase!=='aim'){guideJob=null;return;}
+    if(!job||job.key!==guideKey()||state.phase!=='aim'||guideDragging()||heldGuide){guideJob=null;return;}
     const start=performance.now();let next;
-    do{next=job.iterator.next();}while(!next.done&&performance.now()-start<2);
+    do{next=job.iterator.next();}while(!next.done&&performance.now()-start<.75);
     if(next.done){displayGuideKey=job.key;displayGuideCache=next.value;guideJob=null;requestAimFrame();}
     else scheduleGuideSlice();
   }
@@ -1309,15 +1310,36 @@
       guideReachKey=reachKey;
     }
     const distance=Math.min(hit.distance,boundary,guideReach),hasTarget=hit.ball&&hit.distance<boundary&&hit.distance<=guideReach;
-    // Immediate direction/contact only. Curved post-contact paths are published
-    // together once the exact job completes; never rotate an old prediction.
-    return {shotPath:[{x:c.x,y:c.y},{x:c.x+dx*distance,y:c.y+dy*distance}],cuePath:[],targetPath:[],targetNumber:hasTarget?hit.ball.n:null,objectCenter:hasTarget?{x:hit.ball.x,y:hit.ball.y}:null,pending:true};
+    const end={x:c.x+dx*distance,y:c.y+dy*distance};
+    let cuePath=[],targetPath=[];
+    if(hasTarget){
+      // An immediate contact preview must include the short outgoing lines.
+      // Use isolated balls and the live impulse law, never an old rotated path.
+      // Cloth/spin evolution before impact is refined by the idle solver.
+      const probe=ball(0,end.x,end.y),object=ball(hit.ball.n,hit.ball.x,hit.ball.y);
+      applyCueImpulse(probe,state.power,state.aim,state.spinX,state.spinY,state.breaking);
+      const length=Math.hypot(object.x-probe.x,object.y-probe.y),nx=(object.x-probe.x)/length,ny=(object.y-probe.y)/length;
+      object.x-=nx*1e-7;object.y-=ny*1e-7;
+      const previous=physicsContext;physicsContext={firstHit:null};
+      try{ballsCollide(probe,object);}finally{physicsContext=previous;}
+      const segment=(model,start,limit)=>{
+        const speed=Math.hypot(model.vx,model.vy);if(speed<.01)return [];
+        const ux=model.vx/speed,uy=model.vy/speed;
+        const obstruction=firstBallOnRay(start.x,start.y,ux,uy,[0,hit.ball.n]);
+        const reach=Math.min(limit,firstBoundaryOnRay(start.x,start.y,ux,uy),obstruction.distance);
+        return reach>1e-6?[start,{x:start.x+ux*reach,y:start.y+uy*reach}]:[];
+      };
+      cuePath=segment(probe,end,8);
+      targetPath=segment(object,{x:hit.ball.x,y:hit.ball.y},11);
+    }
+    return {shotPath:[{x:c.x,y:c.y},end],cuePath,targetPath,targetNumber:hasTarget?hit.ball.n:null,objectCenter:hasTarget?{x:hit.ball.x,y:hit.ball.y}:null,pending:true};
   }
   function displayGuide(interactive=false){
     if(heldGuide)return heldGuide;
     const key=guideKey();
     if(key===displayGuideKey)return displayGuideCache;
     if(interactive){
+      if(guideDragging()){guideJob=null;return quickGuide();}
       if(!guideJob||guideJob.key!==key)guideJob={key,iterator:computeDisplayGuide()};
       scheduleGuideSlice();return quickGuide();
     }
@@ -1973,11 +1995,19 @@
       ctx.fillStyle='#86cbd5';ctx.font='13px sans-serif';ctx.fillText(state.aiPlan?'准备出杆 · 2.5 秒':'正在试算候选路线',700,433);ctx.restore();
     }
   }
-  let aimFramePending=false;
+  let aimFramePending=false,lastAimPaint=0;
   function requestAimFrame(){
     if(aimFramePending)return;
     aimFramePending=true;
-    requestAnimationFrame(()=>{aimFramePending=false;if(state.phase==='aim'){updateUI();render();}});
+    requestAnimationFrame(now=>{
+      aimFramePending=false;if(state.phase!=='aim')return;
+      const started=performance.now(),dragging=guideDragging();
+      // Direction-only input does not need to rewrite scores, rules or buttons.
+      if(dragging)syncAngleUI();else updateUI();
+      render();
+      if(dragging&&Number.isFinite(now))adaptResolution(performance.now()-started,now-lastAimPaint,now);
+      lastAimPaint=Number.isFinite(now)?now:0;
+    });
   }
   const aimGain=.006,rulerGain=.002;
   const sideways=()=>document.getElementById('mobile-pool-preview')?.classList.contains('is-landscape')||false;
@@ -2027,7 +2057,7 @@
     }else if((state.drag==='place'||state.drag==='place-break')&&state.phase==='aim'){
       const p=pointerWorld(e);if(placeCue(p.x,p.y,false))say('白球位置已预览，可继续调整或确认摆放。');
     }
-    state.drag=null;
+    state.drag=null;requestAimFrame();
   };
   canvas.addEventListener('pointerup',pointerUp);canvas.addEventListener('pointercancel',e=>{if(state.drag?.kind==='aim'&&e?.pointerId!==undefined&&state.drag.id!==e.pointerId)return;if(state.drag?.kind==='aim')state.aim=state.drag.startAim;state.drag=null;requestAimFrame();});
   const spinPad=$('spinPad');
@@ -2145,7 +2175,7 @@
     state.aim=angleDrag.aim+(rulerAxis(e)-angleDrag.start)*angleDrag.gain*Math.PI/180;
     requestAimFrame();
   });
-  const stopAngleDrag=()=>{angleDrag=null;angleRuler.classList.remove('dragging');};
+  const stopAngleDrag=()=>{angleDrag=null;angleRuler.classList.remove('dragging');requestAimFrame();};
   angleRuler.addEventListener('pointerup',e=>{if(angleDrag&&angleDrag.id===e.pointerId){if(canAdjustStroke())state.aim=angleDrag.aim+(rulerAxis(e)-angleDrag.start)*angleDrag.gain*Math.PI/180;stopAngleDrag();updateUI();render();}});
   angleRuler.addEventListener('pointercancel',stopAngleDrag);
   angleRuler.addEventListener('keydown',e=>{
