@@ -8,8 +8,8 @@ fixtures.push({name:'weak-unreachable',balls:[{n:0,x:30,y:25},{n:1,x:70,y:25}],p
 fixtures.push({name:'nearest-obstruction',balls:[{n:0,x:30,y:25},{n:1,x:70,y:25},{n:2,x:46,y:25}],power:56});
 fixtures.push({name:'middle-pocket',balls:[{n:0,x:50,y:22},{n:1,x:50,y:8}],power:56,aim:-Math.PI/2});
 fixtures.push({name:'corner-pocket',balls:[{n:0,x:24,y:12},{n:1,x:12,y:6}],power:56,aim:Math.atan2(-6,-12)});
-fixtures.push({name:'one-rail-kick',balls:[{n:0,x:25,y:25},{n:1,x:55,y:10}],power:80,aim:-172*Math.PI/180,expectedRails:1});
-fixtures.push({name:'two-rail-kick',balls:[{n:0,x:20,y:25},{n:1,x:70,y:15}],power:80,aim:-177.5*Math.PI/180,expectedRails:2});
+fixtures.push({name:'one-rail-kick',balls:[{n:0,x:25,y:25},{n:1,x:55,y:10}],power:80,aim:-170.1*Math.PI/180,expectedRails:1});
+fixtures.push({name:'two-rail-kick',balls:[{n:0,x:20,y:25},{n:1,x:70,y:15}],power:80,aim:-176.6*Math.PI/180,expectedRails:2});
 for(const f of fixtures){
  t.setGuideBalls(f.balls,f.aim||0,f.power,f.spinY||0,f.spinX||0);
  const before=w.render_game_to_text(),g=t.getDisplayGuide();

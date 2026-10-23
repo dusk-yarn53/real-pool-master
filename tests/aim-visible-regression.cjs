@@ -11,7 +11,7 @@ const event=x=>({pointerId:1,clientX:x,clientY:300,preventDefault(){}});g.canvas
 let painted=0;
 for(let frame=1;frame<=12;frame++){
  g.canvas.handlers.pointermove(event(400+frame*4));flush();const p=t.interactiveGuide(),ctx=g.canvas.getContext('2d'),ratio=t.getRenderInfo().ratio;
- const points=[p.shotPath,p.targetPath,p.cuePath].filter(path=>path.length>=2).map(path=>({x:(path[0].x+path[1].x)/2,y:(path[0].y+path[1].y)/2}));
+ const points=[p.shotPath,p.targetPath,p.cuePath].filter(path=>path.length>=2).map(path=>{const lengths=path.slice(1).map((p,i)=>Math.hypot(p.x-path[i].x,p.y-path[i].y));let remaining=lengths.reduce((a,b)=>a+b,0)*.65;for(let i=0;i<lengths.length;i++){if(remaining<=lengths[i]){const f=remaining/lengths[i];return {x:path[i].x+(path[i+1].x-path[i].x)*f,y:path[i].y+(path[i+1].y-path[i].y)*f};}remaining-=lengths[i];}return path.at(-1);});
  assert(points.length===3,'three preview lines required in this cut-ball fixture');
  const samples=points.map(q=>{const x=Math.round((60+q.x*12.8)*ratio),y=Math.round((75+q.y*12.8)*ratio);return {x,y,before:ctx.getImageData(x-2,y-2,5,5).data};});
  t.withoutAim();

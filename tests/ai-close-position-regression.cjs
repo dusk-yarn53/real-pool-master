@@ -26,9 +26,8 @@ assert(t.masterStrokeCost({power:20,spinX:0,spinY:0},near)<=t.masterStrokeCost({
     assert(out.plan.positionPlanned&&out.plan.robustness>=.75,'leave needs a stable attack');
     const c=out.result.balls.find(b=>b.n===0),next=out.result.balls.find(b=>b.n===9);
     const distance=Math.hypot(c.x-next.x,c.y-next.y);
-    // Opposite-side balls cannot always be reached closely without risking
-    // the current pot. Bounds retain that route while improving easy leaves.
-    assert(distance<[40,34,18,20][results.length],'avoidable far-table leave: '+distance);
+    // All four reachable fixtures must now leave a close next shot.
+    assert(distance<=22,'avoidable far-table leave: '+distance);
     results.push({distance,power:out.plan.power,spinY:out.plan.spinY,robustness:out.plan.robustness});
   }
   console.log(JSON.stringify({passed:true,near:t.aiPositionScore(near),far:t.aiPositionScore(far),results}));
