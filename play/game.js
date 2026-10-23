@@ -1285,7 +1285,7 @@
     return trimmed;
   }
   let guideJob=null,guideTimerPending=false;
-  function guideKey(){return [state.aim,state.power,state.spinX,state.spinY,state.breaking,...state.balls.flatMap(b=>[b.n,b.x,b.y,b.vx,b.vy,b.rollVx,b.rollVy,b.spin,b.pocketed?1:0])].join(',');}
+  function guideKey(){return [state.mode,state.aim,state.power,state.spinX,state.spinY,state.breaking,...state.balls.flatMap(b=>[b.n,b.x,b.y,b.vx,b.vy,b.rollVx,b.rollVy,b.spin,b.pocketed?1:0])].join(',');}
   function runGuideSlice(){
     guideTimerPending=false;
     const job=guideJob;
@@ -1298,7 +1298,8 @@
   function scheduleGuideSlice(){if(!guideTimerPending){guideTimerPending=true;setTimeout(runGuideSlice,0);}}
   let guideReachKey='',guideReach=0;
   function quickGuide(){
-    const c=cue(),a=state.aim-state.spinX/Math.max(1,Math.hypot(state.spinX,state.spinY))*.018,dx=Math.cos(a),dy=Math.sin(a);
+    const c=cue();if(!c||c.pocketed)return null;
+    const a=state.aim-state.spinX/Math.max(1,Math.hypot(state.spinX,state.spinY))*.018,dx=Math.cos(a),dy=Math.sin(a);
     const hit=firstBallOnRay(c.x,c.y,dx,dy,[0]),boundary=firstBoundaryOnRay(c.x,c.y,dx,dy);
     const reachKey=[state.power,state.spinX,state.spinY,state.breaking,state.mode].join(',');
     if(reachKey!==guideReachKey){
@@ -1740,8 +1741,9 @@
   }
   function drawAim() {
     if(state.phase!=='aim'||state.ballInHand||(state.opponent==='ai'&&state.turn===1&&!state.aiPlan))return;
-    const c=cue(),cueX=Math.cos(state.aim),cueY=Math.sin(state.aim),p=worldToScreen(c.x,c.y);
-    const prediction=displayGuide(true),color=prediction.targetNumber!==null&&!legalTarget(prediction.targetNumber)?'#ff627a':'#e5fff7';
+    const c=cue();if(!c||c.pocketed)return;
+    const prediction=displayGuide(true);if(!prediction)return;
+    const color=prediction.targetNumber!==null&&!legalTarget(prediction.targetNumber)?'#ff627a':'#e5fff7';
     ctx.save();
     // Draw only the reachable, physically simulated portion of the stroke.
     // Short draw/follow/English paths share the live collision and cloth code.
@@ -2103,7 +2105,8 @@
   }
   meter.addEventListener('pointerdown',e=>{
     if(!canAdjustStroke()||state.drag||angleDrag||meterDrag)return;
-    e.preventDefault();heldGuide=displayGuide();cuePullActive=true;
+    // Freeze the available prediction without blocking pointerdown on the solver.
+    e.preventDefault();heldGuide=displayGuide(true);cuePullActive=true;
     meterDrag={id:e.pointerId,startAxis:meterAxis(e),pull:0,startingPower:state.power};meter.classList.add('dragging');meter.setPointerCapture(e.pointerId);state.power=5;syncPowerUI();updateUI();render();
   });
   meter.addEventListener('pointermove',e=>{
