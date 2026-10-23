@@ -1,7 +1,7 @@
 (() => {
   'use strict';
   const canvas = document.getElementById('game');
-  let ctx = canvas.getContext('2d',{alpha:false,desynchronized:true});
+  let ctx = canvas.getContext('2d',{alpha:false,desynchronized:false});
   const $ = id => document.getElementById(id);
   const VIEW_W=1400,VIEW_H=790;
   // Touch devices get a lighter backing buffer and cheaper ball effects. The
@@ -315,11 +315,10 @@
       const tangentX=-ny,tangentY=nx;
       const tangentBefore=b.vx*tangentX+b.vy*tangentY;
       const spinBefore=b.spin;
-      const sideEnglish=Math.abs(spinBefore)>.5;
       const restitution=jaw?.52:.79;
       let tangentAfter=tangentBefore*(jaw?.88:.985);
       let spinAfter=spinBefore;
-      if(sideEnglish){
+      { // Apply cushion slip continuously, including zero initial side spin.
         // Solid-sphere rim inertia gives a 3.5 effective tangential mass.
         // Coulomb-limited impulse trades side-spin for tangential travel. Running
         // English can increase translational speed, but never total energy.
@@ -707,6 +706,33 @@
     // A nearby but hidden next ball is worse than a clear continuation.
     return (Number.isFinite(best)?best:140+distance*.3)+(railDistance<3?8:0);
   }
+  const MASTER_NEAR_DISTANCE=22;
+  function closePosition(result){
+    if(result.winning)return {close:true,distance:0,target:null};
+    const balls=result.balls.filter(b=>!b.pocketed),c=balls.find(b=>b.n===0);
+    if(!c)return {close:false,distance:Infinity,target:null};
+    const assigned=currentGroup()||group(result.pocketed?.find(p=>p.n!==0&&p.n!==8)?.n);
+    const targets=targetsInLayout(balls,state.turn,assigned);
+    let best={close:false,distance:Infinity,target:null};
+    for(const target of targets)for(let pocket=0;pocket<6;pocket++){
+      const p=pocketAim(pocket),pd=Math.hypot(p.x-target.x,p.y-target.y);
+      if(pd<.1||!lineClearIn(balls,target.x,target.y,p.x,p.y,[0,target.n]))continue;
+      const nx=(p.x-target.x)/pd,ny=(p.y-target.y)/pd,gx=target.x-2*R*nx,gy=target.y-2*R*ny;
+      const cd=Math.hypot(gx-c.x,gy-c.y),cos=((gx-c.x)*nx+(gy-c.y)*ny)/Math.max(cd,.01);
+      if(cd<5||cos<.55||gx<R||gx>W-R||gy<R||gy>H-R||!lineClearIn(balls,c.x,c.y,gx,gy,[0,target.n]))continue;
+      if(Math.min(c.x,W-c.x,c.y,H-c.y)<R+.7)continue;
+      const distance=Math.max(cd,Math.hypot(target.x-c.x,target.y-c.y));
+      if(distance<best.distance)best={close:distance<=MASTER_NEAR_DISTANCE,distance,target:target.n,pocket};
+    }
+    return best;
+  }
+  function leaveMetadata(result){
+    return {closeLeave:closePosition(result).close,cueRails:(result.cushionHits||[]).filter(h=>h.n===0&&!h.beforeFirstHit&&!h.jaw).length};
+  }
+  function preferClosePlans(plans){
+    const near=plans.filter(p=>p.closeLeave);
+    return near.length?near:plans;
+  }
   function masterPositionScore(result){
     if(result.winning)return -60;
     const c=result.balls.find(b=>b.n===0&&!b.pocketed);
@@ -743,7 +769,7 @@
       const plan=spinVariant(base,spinX,spinY,spinY<-.7?1.06:spinY>.7?.94:1);
       const result=simulateAIShot(plan);
       if(result.safe&&(result.potted||result.winning)&&validTacticalRoute(plan,result)){
-        const cost=masterStrokeCost(plan,result);refined.push({...plan,score:base.score-(base.positionCost||0)+cost,positionCost:cost,positionPlanned:true});
+        const cost=masterStrokeCost(plan,result);refined.push({...plan,score:base.score-(base.positionCost||0)+cost,positionCost:cost,positionPlanned:true,...leaveMetadata(result)});
       }
       if(++count%4===0)await new Promise(resolve=>setTimeout(resolve,0));
     }
@@ -755,7 +781,7 @@
       const plan={...base,power:clamp(base.power+delta,8,100)},result=simulateAIShot(plan);
       if(result.safe&&(result.potted||result.winning)&&validTacticalRoute(plan,result)){
         const cost=masterStrokeCost(plan,result);
-        refined.push({...plan,score:base.score-base.positionCost+cost,positionCost:cost});
+        refined.push({...plan,score:base.score-base.positionCost+cost,positionCost:cost,...leaveMetadata(result)});
       }
       if(++count%4===0)await new Promise(resolve=>setTimeout(resolve,0));
     }
@@ -766,7 +792,7 @@
       if(Math.hypot(sx,sy)>1)continue;
       const plan={...spinVariant(base,sx,sy),power:clamp(base.power+delta,8,100)},result=simulateAIShot(plan);
       if(result.safe&&(result.potted||result.winning)&&validTacticalRoute(plan,result)){
-        const cost=masterStrokeCost(plan,result);refined.push({...plan,score:base.score-base.positionCost+cost,positionCost:cost,positionPlanned:true});
+        const cost=masterStrokeCost(plan,result);refined.push({...plan,score:base.score-base.positionCost+cost,positionCost:cost,positionPlanned:true,...leaveMetadata(result)});
       }
       if(++count%2===0)await new Promise(resolve=>setTimeout(resolve,0));
     }
@@ -775,13 +801,39 @@
       if(!isCurrent())return null;
       const plan={...spinVariant(base,spinX,spinY),power},result=simulateAIShot(plan);
       if(result.safe&&(result.potted||result.winning)&&validTacticalRoute(plan,result)){
-        const cost=masterStrokeCost(plan,result);refined.push({...plan,score:base.score-(base.positionCost||0)+cost,positionCost:cost,positionPlanned:true});
+        const cost=masterStrokeCost(plan,result);refined.push({...plan,score:base.score-(base.positionCost||0)+cost,positionCost:cost,positionPlanned:true,...leaveMetadata(result)});
       }
       if(++count%4===0)await new Promise(resolve=>setTimeout(resolve,0));
     }
+    // Explore real high-energy routes; only simulated legal pots enter ranking.
+    const railSeeds=[];
+    for(const base of candidates.slice(0,3))for(const power of [50,55,60,65,70,75,80,85,90,95,100])for(const [sx,sy] of [[0,-.95],[0,.95],[-.95,0],[.95,0],[-.8,-.55],[.8,-.55],[-.8,.55],[.8,.55]]){
+      if(!isCurrent())return null;
+      const plan={...spinVariant(base,sx,sy),power},result=simulateAIShot(plan);
+      if(result.safe&&(result.potted||result.winning)&&validTacticalRoute(plan,result)){
+        const cost=masterStrokeCost(plan,result),candidate={...plan,score:base.score-(base.positionCost||0)+cost,positionCost:cost,positionPlanned:true,...leaveMetadata(result)};
+        refined.push(candidate);if(candidate.cueRails>=2)railSeeds.push(candidate);
+      }
+      if(++count%2===0)await new Promise(resolve=>setTimeout(resolve,0));
+    }
+    const railSeen=new Set();let railCount=0;
+    for(const base of railSeeds.sort((a,b)=>a.score-b.score)){
+      const key=[base.target,base.pocket,base.cueRails,Math.sign(base.spinX||0),Math.sign(base.spinY||0)].join(':');
+      if(railSeen.has(key))continue;railSeen.add(key);if(railCount++===5)break;
+      for(const delta of [-4,-2,2,4])for(const dx of [-.07,0,.07]){
+        if(!isCurrent())return null;
+        const sx=clamp((base.spinX||0)+dx,-.95,.95),sy=base.spinY||0;
+        if(Math.hypot(sx,sy)>1)continue;
+        const plan={...spinVariant(base,sx,sy),power:clamp(base.power+delta,8,100)},result=simulateAIShot(plan);
+        if(result.safe&&(result.potted||result.winning)&&validTacticalRoute(plan,result)){
+          const cost=masterStrokeCost(plan,result);refined.push({...plan,score:base.score-base.positionCost+cost,positionCost:cost,positionPlanned:true,...leaveMetadata(result)});
+        }
+        if(++count%2===0)await new Promise(resolve=>setTimeout(resolve,0));
+      }
+    }
     // Re-seed after the broad search so fine control reaches newly found
     // short leaves too. Integer power matches the actual executed stroke.
-    const fineSeeds=refined.slice().sort((a,b)=>a.score-b.score).slice(0,3);
+    const fineSeeds=preferClosePlans(refined).slice().sort((a,b)=>a.score-b.score).slice(0,3);
     for(const base of fineSeeds)for(const delta of [-1,0,1])for(const dy of [-.05,0,.05]){
       if(!isCurrent())return null;
       const sy=clamp((base.spinY||0)+dy,-.95,.95);
@@ -789,16 +841,20 @@
       const plan={...base,power:clamp(base.power+delta,8,100),spinY:sy},result=simulateAIShot(plan);
       if(result.safe&&(result.potted||result.winning)&&validTacticalRoute(plan,result)){
         const cost=masterStrokeCost(plan,result);
-        refined.push({...plan,score:base.score-base.positionCost+cost,positionCost:cost,positionPlanned:true});
+        refined.push({...plan,score:base.score-base.positionCost+cost,positionCost:cost,positionPlanned:true,...leaveMetadata(result)});
       }
       if(++count%2===0)await new Promise(resolve=>setTimeout(resolve,0));
     }
-    const angleSeeds=[...candidates,...refined.slice().sort((a,b)=>a.score-b.score).slice(0,4)];
-    for(const base of angleSeeds)for(const offset of [-.0015,-.00075,.00075,.0015]){
+    const angleSeen=new Set(),angleSeeds=[...candidates];
+    for(const plan of preferClosePlans(refined).slice().sort((a,b)=>a.score-b.score)){
+      const key=[plan.target,plan.pocket,Math.round(plan.power/5),Math.sign(plan.spinX||0),Math.round((plan.spinY||0)*2)].join(':');
+      if(angleSeen.has(key))continue;angleSeen.add(key);angleSeeds.push(plan);if(angleSeen.size===24)break;
+    }
+    for(const base of angleSeeds)for(const offset of [-.0045,-.003,-.0015,-.00075,.00075,.0015,.003,.0045]){
       if(!isCurrent())return null;
       const plan={...base,aim:base.aim+offset},result=simulateAIShot(plan);
       if(result.safe&&(result.potted||result.winning)&&validTacticalRoute(plan,result)){
-        const cost=masterStrokeCost(plan,result);refined.push({...plan,score:base.score-(base.positionCost||0)+cost,positionCost:cost,positionPlanned:true});
+        const cost=masterStrokeCost(plan,result);refined.push({...plan,score:base.score-(base.positionCost||0)+cost,positionCost:cost,positionPlanned:true,...leaveMetadata(result)});
       }
       if(++count%2===0)await new Promise(resolve=>setTimeout(resolve,0));
     }
@@ -878,7 +934,7 @@
         if(!isCurrent())return null;
         const plan={...option,aim:option.aim+offset,power:powerForSpeed(desired*factor),spinX:0,spinY:0};
         const result=simulateAIShot(plan);
-        if(result.safe&&result.potted){const cost=masterStrokeCost(plan,result);success.push({...plan,winning:result.winning,score:option.score+cost,positionCost:cost,positionPlanned:true});}
+        if(result.safe&&result.potted){const cost=masterStrokeCost(plan,result);success.push({...plan,winning:result.winning,score:option.score+cost,positionCost:cost,positionPlanned:true,...leaveMetadata(result)});}
         if(++trials%2===0)await new Promise(resolve=>setTimeout(resolve,0));
       }
     }
@@ -1095,7 +1151,7 @@
         const plan={...option,aim:option.aim+offset,power:powerForSpeed(desired*factor),spinY:0,type:'attack',trackPotApproach:state.aiDifficulty==='hard'};
         let result=simulateAIShot(plan);
         if((result.potted||result.winning)&&!result.safe){plan.spinY=-.65;result=simulateAIShot(plan);}
-        if(result.safe&&(result.potted||result.winning)){const cost=state.aiDifficulty==='hard'?masterStrokeCost(plan,result):aiPositionScore(result);successful.push({...plan,winning:result.winning,score:option.score+cost+plan.power*.08,positionCost:cost,positionPlanned:state.aiDifficulty==='hard'});}
+        if(result.safe&&(result.potted||result.winning)){const cost=state.aiDifficulty==='hard'?masterStrokeCost(plan,result):aiPositionScore(result);successful.push({...plan,winning:result.winning,score:option.score+cost+plan.power*.08,positionCost:cost,positionPlanned:state.aiDifficulty==='hard',...leaveMetadata(result)});}
         else if(state.aiDifficulty==='hard'&&plausibleAttackAttempt(plan,result))attempts.push({...plan,score:option.score+result.potApproach*18,attackAttempt:true});
         if(++attackTrials%2===0)await new Promise(resolve=>setTimeout(resolve,0));
       }
@@ -1111,35 +1167,36 @@
       // changes choice among validated shots, never the launch physics.
       let finalists=successful.slice(0,state.aiDifficulty==='easy'?3:state.aiDifficulty==='hard'?18:6);
       if(state.aiDifficulty==='hard'){const refined=await refineMasterPosition(finalists,isCurrent);if(!refined)return null;if(refined.length){
-        const candidates=[...refined,...finalists].sort((a,b)=>a.score-b.score),seen=new Set();finalists=[];
+        const candidates=preferClosePlans([...refined,...finalists]).sort((a,b)=>a.score-b.score),seen=new Set();finalists=[];
         for(const plan of candidates){
           const key=[plan.target,plan.potTarget,plan.pocket,Math.round(plan.power/8),Math.round((plan.spinY||0)*3),Math.round((plan.spinX||0)*3),Math.round(plan.aim*1500)].join(':');
           if(seen.has(key))continue;seen.add(key);finalists.push(plan);if(finalists.length===32)break;
         }
       }}
       for(const plan of finalists){
-        let robust=0,scratchRisk=0,leaveDrift=0;
+        let robust=0,scratchRisk=0,leaveDrift=0,closeChecks=0;
         for(const sign of [-1,1])for(const powerSign of (state.aiDifficulty==='hard'?[-1,1]:[sign])){
           if(!isCurrent())return null;
           const perturbation=.0015;
           const result=simulateAIShot({...plan,aim:plan.aim+sign*perturbation,power:clamp(Math.round(plan.power*(1+powerSign*.015)),8,100)});
           if(result.scratch)scratchRisk++;
           if(result.safe&&(result.potted||result.winning)&&validTacticalRoute(plan,result)){
-            robust++;
+            robust++;if(closePosition(result).close)closeChecks++;
             if(state.aiDifficulty==='hard')leaveDrift+=Math.max(0,masterStrokeCost(plan,result)-(plan.positionCost||0));
           }
         }
         const checks=state.aiDifficulty==='hard'?4:2;
-        plan.score+=(checks-robust)*(state.aiDifficulty==='hard'?60:12)+scratchRisk*80+leaveDrift/checks*.6;plan.robustness=robust/checks;
+        plan.score+=(checks-robust)*(state.aiDifficulty==='hard'?60:12)+scratchRisk*80+leaveDrift/checks*.6;plan.robustness=robust/checks;plan.closeRobustness=closeChecks/checks;
         await new Promise(resolve=>setTimeout(resolve,0));
       }
+      if(state.aiDifficulty==='hard'){const stable=finalists.filter(p=>p.closeLeave&&p.closeRobustness>=.75&&p.robustness>=.75);if(stable.length)finalists=stable;}
       finalists.sort((a,b)=>a.score-b.score);
       const margin=state.aiDifficulty==='easy'?20:state.aiDifficulty==='normal'?5:0;
       const pool=finalists.filter(p=>p.score<=finalists[0].score+margin);
       const best=pool[Math.floor(Math.random()*pool.length)];
       // Stability ranks attacks; it never replaces an available pot with a
       // snooker. Master keeps its offensive intent on difficult opportunities.
-      best.description=best.winning?'决胜出杆 · 尝试打进决胜球':`${best.target} 号 → ${POCKETS[best.pocket].name} · ${best.type==='bank'?(POCKETS[best.pocket].x===W/2?'翻中袋 · ':'翻袋 · '):best.type==='kick'?'碰库勾球 · ':best.type==='combination'?`传 ${best.potTarget} 号 · `:''}${strokeName(best)}${best.positionPlanned?' · 留下一杆角度':''}`;
+      best.description=best.winning?'决胜出杆 · 尝试打进决胜球':`${best.target} 号 → ${POCKETS[best.pocket].name} · ${best.type==='bank'?(POCKETS[best.pocket].x===W/2?'翻中袋 · ':'翻袋 · '):best.type==='kick'?'碰库勾球 · ':best.type==='combination'?`传 ${best.potTarget} 号 · `:''}${strokeName(best)}${best.cueRails>=2?` · 绕${best.cueRails}库走位`:''}${best.closeLeave?' · 近台叫位':best.positionPlanned?' · 留下一杆角度':''}`;
       return executeAIPlan(best);
     }
     if(state.aiDifficulty==='hard'&&attempts.length){
@@ -1315,7 +1372,7 @@
     else scheduleGuideSlice();
   }
   function scheduleGuideSlice(){if(!guideTimerPending){guideTimerPending=true;setTimeout(runGuideSlice,0);}}
-  let guideReachKey='',guideReach=0;
+  let guideReachKey='',guideReach=0,guideApproach=[];
   function quickGuide(){
     const c=cue();if(!c||c.pocketed)return null;
     const a=state.aim-state.spinX/Math.max(1,Math.hypot(state.spinX,state.spinY))*.018,dx=Math.cos(a),dy=Math.sin(a);
@@ -1323,29 +1380,44 @@
     const reachKey=[state.power,state.spinX,state.spinY,state.breaking,state.mode].join(',');
     if(reachKey!==guideReachKey){
       const probe=ball(0,0,0);applyCueImpulse(probe,state.power,0,state.spinX,state.spinY,state.breaking);
-      guideReach=0;
-      for(let i=0;i<5400;i++){clothStep(probe,STEP);guideReach+=Math.hypot(probe.vx,probe.vy)*STEP;if(guideReach>235||Math.hypot(probe.vx,probe.vy)<.01)break;}
+      guideReach=0;guideApproach=[{distance:0,...probe}];
+      for(let i=0;i<5400;i++){
+        clothStep(probe,STEP);guideReach+=Math.hypot(probe.vx,probe.vy)*STEP;
+        guideApproach.push({distance:guideReach,vx:probe.vx,vy:probe.vy,rollVx:probe.rollVx,rollVy:probe.rollVy,spin:probe.spin});
+        if(guideReach>235||Math.hypot(probe.vx,probe.vy)<.01)break;
+      }
       guideReachKey=reachKey;
     }
     const distance=Math.min(hit.distance,boundary,guideReach),hasTarget=hit.ball&&hit.distance<boundary&&hit.distance<=guideReach;
     const end={x:c.x+dx*distance,y:c.y+dy*distance};
     let cuePath=[],targetPath=[];
     if(hasTarget){
-      // An immediate contact preview must include the short outgoing lines.
-      // Use isolated balls and the live impulse law, never an old rotated path.
-      // Cloth/spin evolution before impact is refined by the idle solver.
+      // Evolve spin to contact: launch backspin can become follow on a long approach.
       const probe=ball(0,end.x,end.y),object=ball(hit.ball.n,hit.ball.x,hit.ball.y);
-      applyCueImpulse(probe,state.power,state.aim,state.spinX,state.spinY,state.breaking);
+      let lo=0,hi=guideApproach.length-1;
+      while(lo<hi){const mid=(lo+hi)>>1;if(guideApproach[mid].distance<distance)lo=mid+1;else hi=mid;}
+      const before=guideApproach[Math.max(0,lo-1)],after=guideApproach[lo],mix=clamp((distance-before.distance)/Math.max(1e-9,after.distance-before.distance),0,1);
+      const at=k=>before[k]+(after[k]-before[k])*mix,ca=Math.cos(state.aim),sa=Math.sin(state.aim);
+      probe.vx=at('vx')*ca-at('vy')*sa;probe.vy=at('vx')*sa+at('vy')*ca;
+      probe.rollVx=at('rollVx')*ca-at('rollVy')*sa;probe.rollVy=at('rollVx')*sa+at('rollVy')*ca;probe.spin=at('spin');
       const length=Math.hypot(object.x-probe.x,object.y-probe.y),nx=(object.x-probe.x)/length,ny=(object.y-probe.y)/length;
       object.x-=nx*1e-7;object.y-=ny*1e-7;
       const previous=physicsContext;physicsContext={firstHit:null};
       try{ballsCollide(probe,object);}finally{physicsContext=previous;}
       const segment=(model,start,limit)=>{
-        const speed=Math.hypot(model.vx,model.vy);if(speed<.01)return [];
-        const ux=model.vx/speed,uy=model.vy/speed;
-        const obstruction=firstBallOnRay(start.x,start.y,ux,uy,[0,hit.ball.n]);
-        const reach=Math.min(limit,firstBoundaryOnRay(start.x,start.y,ux,uy),obstruction.distance);
-        return reach>1e-6?[start,{x:start.x+ux*reach,y:start.y+uy*reach}]:[];
+        const points=[start];let x=start.x,y=start.y,travel=0;
+        for(let i=0;i<900;i++){
+          clothStep(model,STEP);const speed=Math.hypot(model.vx,model.vy);
+          if(speed<.01&&Math.hypot(model.rollVx,model.rollVy)<.01)break;
+          if(speed<1e-8)continue;
+          const ux=model.vx/speed,uy=model.vy/speed,obstruction=firstBallOnRay(x,y,ux,uy,[0,hit.ball.n]);
+          const step=speed*STEP,reach=Math.max(0,Math.min(step,limit-travel,firstBoundaryOnRay(x,y,ux,uy),obstruction.distance));
+          x+=ux*reach;y+=uy*reach;travel+=reach;
+          if(i%4===0||reach<step||travel>=limit)points.push({x,y});
+          if(reach<step-1e-8||travel>=limit)break;
+        }
+        if(Math.hypot(x-points.at(-1).x,y-points.at(-1).y)>1e-8)points.push({x,y});
+        return points;
       };
       cuePath=segment(probe,end,8);
       targetPath=segment(object,{x:hit.ball.x,y:hit.ball.y},11);
@@ -1765,7 +1837,7 @@
   }
   function guidePath(points,color,maxLength=Infinity,dashed=false){
     if(points.length<2)return;
-    ctx.strokeStyle=color;ctx.shadowColor=color;ctx.shadowBlur=0;ctx.lineWidth=1.15;ctx.lineCap='round';
+    ctx.strokeStyle=color;ctx.shadowColor=color;ctx.shadowBlur=0;ctx.lineWidth=1.65;ctx.lineCap='round';
     ctx.setLineDash(dashed?[7,6]:[]);ctx.beginPath();
     let length=0,end=points[0];const start=worldToScreen(points[0].x,points[0].y);ctx.moveTo(start.x,start.y);
     for(let i=1;i<points.length;i++){
@@ -1779,10 +1851,37 @@
 
     ctx.stroke();ctx.setLineDash([]);ctx.shadowBlur=0;
   }
+  let guideVisual=null,guideVisualKey='',guideRefinement=null;
+  function sampleGuidePath(path,t){
+    if(!path.length)return null;
+    let remaining=pathLength(path)*t;
+    for(let i=1;i<path.length;i++){
+      const a=path[i-1],b=path[i],length=Math.hypot(b.x-a.x,b.y-a.y);
+      if(remaining<=length)return {x:a.x+(b.x-a.x)*remaining/Math.max(length,1e-9),y:a.y+(b.y-a.y)*remaining/Math.max(length,1e-9)};
+      remaining-=length;
+    }
+    return path.at(-1);
+  }
+  function visualGuide(prediction){
+    const key=guideKey(),now=performance.now();
+    if(heldGuide||guideDragging()){guideRefinement=null;guideVisual=prediction;guideVisualKey=key;return prediction;}
+    if(key!==guideVisualKey){guideRefinement=null;guideVisualKey=key;}
+    else if(guideVisual?.pending&&!prediction.pending&&guideVisual.targetNumber===prediction.targetNumber)guideRefinement={from:guideVisual,start:now};
+    guideVisual=prediction;
+    if(!guideRefinement)return prediction;
+    const t=clamp((now-guideRefinement.start)/100,0,1),f=t*t*(3-2*t),from=guideRefinement.from;
+    if(t>=1){guideRefinement=null;return prediction;}
+    const blend=name=>{
+      const a=from[name],b=prediction[name];if(!a.length||!b.length)return b;
+      return Array.from({length:24},(_,i)=>{const p=sampleGuidePath(a,i/23),q=sampleGuidePath(b,i/23);return {x:p.x+(q.x-p.x)*f,y:p.y+(q.y-p.y)*f};});
+    };
+    requestAimFrame();return {...prediction,shotPath:blend('shotPath'),cuePath:blend('cuePath'),targetPath:blend('targetPath')};
+  }
   function drawAim() {
     if(state.phase!=='aim'||state.ballInHand||(state.opponent==='ai'&&state.turn===1&&!state.aiPlan))return;
     const c=cue();if(!c||c.pocketed)return;
-    const prediction=displayGuide(true);if(!prediction)return;
+    const rawPrediction=displayGuide(true);if(!rawPrediction)return;
+    const prediction=visualGuide(rawPrediction);
     const color=prediction.targetNumber!==null&&!legalTarget(prediction.targetNumber)?'#ff627a':'#e5fff7';
     ctx.save();
     // Draw only the reachable, physically simulated portion of the stroke.
