@@ -32,6 +32,7 @@ jobs:
         run: |
           node tests/master-offence-20261020.cjs
           node tests/master-realism-regression.cjs
+          node tests/ai-close-position-regression.cjs
           node tests/guide-physics-regression.cjs
       - name: Compatibility and loading
         run: |
