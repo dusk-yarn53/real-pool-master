@@ -696,12 +696,16 @@
       if(gx<R||gx>W-R||gy<R||gy>H-R||cos<.28||!lineClearIn(balls,c.x,c.y,gx,gy,[0,target.n]))continue;
       const risk=attackRisk({pd,cd,cos},target);
       if(state.aiDifficulty==='hard'&&risk.unrealistic)continue;
-      best=Math.min(best,pd*.23+cd*.14+(1-cos)*28+(state.aiDifficulty==='hard'?risk.risk*.65:0));
+      // Prefer a comfortable short approach, not a kiss-distance leave or
+      // a long thin cut. Distances are table inches (100 x 50 playing area).
+      const nearCost=cd*.28+Math.max(0,cd-22)*.8+Math.max(0,cd-40)*.65;
+      const crowdedCost=Math.max(0,7-cd)*2;
+      best=Math.min(best,pd*.23+nearCost+crowdedCost+(1-cos)*42+risk.risk*.65);
     }
     const distance=Math.min(...targets.map(b=>Math.hypot(b.x-c.x,b.y-c.y)));
     const railDistance=Math.min(c.x,W-c.x,c.y,H-c.y);
     // A nearby but hidden next ball is worse than a clear continuation.
-    return (Number.isFinite(best)?best:40+distance*.12)+(railDistance<3?8:0);
+    return (Number.isFinite(best)?best:140+distance*.3)+(railDistance<3?8:0);
   }
   function masterPositionScore(result){
     if(result.winning)return -60;
@@ -726,11 +730,9 @@
     // Prefer simpler, controllable strokes when the resulting leave is similar.
     // Strong spin is selected for position, not rewarded for its own sake.
     const spin=Math.hypot(plan.spinX||0,plan.spinY||0);
-    // Prefer a positive stroke for comparable leaves, but allow a soft roll
-    // for a short straight pot. Position and scratch avoidance still dominate.
-    const strokeFloor=clamp(34+((plan.cd||0)+(plan.pd||0))*.18,34,50);
-    const softCost=Math.max(0,strokeFloor-plan.power)*.85;
-    return masterPositionScore(result)+spin*spin*2.5+softCost+Math.max(0,plan.power-78)*.22;
+    // Do not penalize a controlled soft stroke: legal pots are already
+    // verified with live physics before a leave enters the candidate list.
+    return masterPositionScore(result)+spin*spin*2.5+Math.max(0,plan.power-65)*.3;
   }
   async function refineMasterPosition(plans,isCurrent){
     const seen=new Set(),candidates=[];
@@ -768,15 +770,28 @@
       }
       if(++count%2===0)await new Promise(resolve=>setTimeout(resolve,0));
     }
-    // Search firmer real strokes with strong English/draw/follow. The extra
-    // speed comes from the displayed power, shared with human shots.
-    for(const base of candidates.slice(0,2))for(const power of [...new Set([Math.max(42,Math.round(base.power*1.28)),Math.max(52,Math.round(base.power*1.55))].map(p=>clamp(p,8,85)))])for(const [spinX,spinY] of MASTER_SPINS){
+    // Explore softer and firmer leaves equally before the final fine pass.
+    for(const base of candidates.slice(0,2))for(const power of [...new Set([base.power*.7,base.power*.9,Math.max(42,base.power*1.2),Math.max(58,base.power*1.5)].map(p=>clamp(Math.round(p),8,85)))])for(const [spinX,spinY] of MASTER_SPINS.slice(0,15)){
       if(!isCurrent())return null;
       const plan={...spinVariant(base,spinX,spinY),power},result=simulateAIShot(plan);
       if(result.safe&&(result.potted||result.winning)&&validTacticalRoute(plan,result)){
         const cost=masterStrokeCost(plan,result);refined.push({...plan,score:base.score-(base.positionCost||0)+cost,positionCost:cost,positionPlanned:true});
       }
       if(++count%4===0)await new Promise(resolve=>setTimeout(resolve,0));
+    }
+    // Re-seed after the broad search so fine control reaches newly found
+    // short leaves too. Integer power matches the actual executed stroke.
+    const fineSeeds=refined.slice().sort((a,b)=>a.score-b.score).slice(0,3);
+    for(const base of fineSeeds)for(const delta of [-1,0,1])for(const dy of [-.05,0,.05]){
+      if(!isCurrent())return null;
+      const sy=clamp((base.spinY||0)+dy,-.95,.95);
+      if(Math.hypot(base.spinX||0,sy)>1)continue;
+      const plan={...base,power:clamp(base.power+delta,8,100),spinY:sy},result=simulateAIShot(plan);
+      if(result.safe&&(result.potted||result.winning)&&validTacticalRoute(plan,result)){
+        const cost=masterStrokeCost(plan,result);
+        refined.push({...plan,score:base.score-base.positionCost+cost,positionCost:cost,positionPlanned:true});
+      }
+      if(++count%2===0)await new Promise(resolve=>setTimeout(resolve,0));
     }
     const angleSeeds=[...candidates,...refined.slice().sort((a,b)=>a.score-b.score).slice(0,4)];
     for(const base of angleSeeds)for(const offset of [-.0015,-.00075,.00075,.0015]){
@@ -1103,16 +1118,19 @@
         }
       }}
       for(const plan of finalists){
-        let robust=0,scratchRisk=0;
+        let robust=0,scratchRisk=0,leaveDrift=0;
         for(const sign of [-1,1])for(const powerSign of (state.aiDifficulty==='hard'?[-1,1]:[sign])){
           if(!isCurrent())return null;
           const perturbation=.0015;
           const result=simulateAIShot({...plan,aim:plan.aim+sign*perturbation,power:clamp(Math.round(plan.power*(1+powerSign*.015)),8,100)});
           if(result.scratch)scratchRisk++;
-          if(result.safe&&(result.potted||result.winning)&&validTacticalRoute(plan,result))robust++;
+          if(result.safe&&(result.potted||result.winning)&&validTacticalRoute(plan,result)){
+            robust++;
+            if(state.aiDifficulty==='hard')leaveDrift+=Math.max(0,masterStrokeCost(plan,result)-(plan.positionCost||0));
+          }
         }
         const checks=state.aiDifficulty==='hard'?4:2;
-        plan.score+=(checks-robust)*(state.aiDifficulty==='hard'?60:12)+scratchRisk*80;plan.robustness=robust/checks;
+        plan.score+=(checks-robust)*(state.aiDifficulty==='hard'?60:12)+scratchRisk*80+leaveDrift/checks*.6;plan.robustness=robust/checks;
         await new Promise(resolve=>setTimeout(resolve,0));
       }
       finalists.sort((a,b)=>a.score-b.score);
