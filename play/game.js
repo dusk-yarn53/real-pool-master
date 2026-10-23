@@ -726,8 +726,26 @@
     }
     return best;
   }
+  function clusterBreakValue(result){
+    if(!result.safe||!result.potted||!closePosition(result).close)return 0;
+    const before=live().filter(b=>b.n!==0),after=new Map(result.balls.map(b=>[b.n,b]));
+    const assigned=currentGroup()||group(result.pocketed?.find(p=>p.n!==0&&p.n!==8)?.n);
+    let opened=0;
+    for(let i=0;i<before.length;i++)for(let j=i+1;j<before.length;j++){
+      const a=before[i],b=before[j],u=after.get(a.n),v=after.get(b.n);
+      if(!u||!v||u.pocketed||v.pocketed)continue;
+      if(state.mode==='eight'&&assigned&&group(a.n)!==assigned&&group(b.n)!==assigned)continue;
+      const gap=Math.hypot(a.x-b.x,a.y-b.y);
+      if(gap>2*R+1.5)continue;
+      const spread=Math.hypot(u.x-v.x,u.y-v.y)-gap;
+      if(spread<3)continue;
+      // Count only survivors with an opened pocket lane, not random scatter.
+      if([u,v].some(t=>POCKETS.some((_,k)=>{const p=pocketAim(k);return lineClearIn(result.balls.filter(b=>!b.pocketed),t.x,t.y,p.x,p.y,[0,t.n]);})))opened++;
+    }
+    return Math.min(opened,3);
+  }
   function leaveMetadata(result){
-    return {closeLeave:closePosition(result).close,cueRails:(result.cushionHits||[]).filter(h=>h.n===0&&!h.beforeFirstHit&&!h.jaw).length};
+    return {clusterOpened:clusterBreakValue(result),closeLeave:closePosition(result).close,cueRails:(result.cushionHits||[]).filter(h=>h.n===0&&!h.beforeFirstHit&&!h.jaw).length};
   }
   function preferClosePlans(plans){
     const near=plans.filter(p=>p.closeLeave);
@@ -758,11 +776,11 @@
     const spin=Math.hypot(plan.spinX||0,plan.spinY||0);
     // Do not penalize a controlled soft stroke: legal pots are already
     // verified with live physics before a leave enters the candidate list.
-    return masterPositionScore(result)+spin*spin*2.5+Math.max(0,plan.power-65)*.3;
+    return masterPositionScore(result)-clusterBreakValue(result)*12+spin*spin*2.5+Math.max(0,plan.power-65)*.3;
   }
   async function refineMasterPosition(plans,isCurrent){
     const seen=new Set(),candidates=[];
-    for(const plan of plans){const key=plan.target+':'+(plan.potTarget??plan.target)+':'+plan.pocket;if(seen.has(key))continue;seen.add(key);candidates.push(plan);if(candidates.length===4)break;}
+    for(const plan of plans){const key=plan.type+':'+plan.target+':'+(plan.potTarget??plan.target)+':'+plan.pocket;if(seen.has(key))continue;seen.add(key);candidates.push(plan);if(candidates.length===4)break;}
     const refined=[];let count=0;
     for(const base of candidates)for(const [spinX,spinY] of MASTER_SPINS){
       if(!isCurrent())return null;
@@ -807,12 +825,12 @@
     }
     // Explore real high-energy routes; only simulated legal pots enter ranking.
     const railSeeds=[];
-    for(const base of candidates.slice(0,3))for(const power of [50,55,60,65,70,75,80,85,90,95,100])for(const [sx,sy] of [[0,-.95],[0,.95],[-.95,0],[.95,0],[-.8,-.55],[.8,-.55],[-.8,.55],[.8,.55]]){
+    for(const base of candidates)for(const power of [50,55,60,65,70,75,80,85,90,95,100])for(const [sx,sy] of [[0,-.95],[0,.95],[-.95,0],[.95,0],[-.8,-.55],[.8,-.55],[-.8,.55],[.8,.55]]){
       if(!isCurrent())return null;
       const plan={...spinVariant(base,sx,sy),power},result=simulateAIShot(plan);
       if(result.safe&&(result.potted||result.winning)&&validTacticalRoute(plan,result)){
         const cost=masterStrokeCost(plan,result),candidate={...plan,score:base.score-(base.positionCost||0)+cost,positionCost:cost,positionPlanned:true,...leaveMetadata(result)};
-        refined.push(candidate);if(candidate.cueRails>=2)railSeeds.push(candidate);
+        refined.push(candidate);if(candidate.cueRails>=2||candidate.clusterOpened)railSeeds.push(candidate);
       }
       if(++count%2===0)await new Promise(resolve=>setTimeout(resolve,0));
     }
@@ -1157,16 +1175,22 @@
       }
       await new Promise(resolve=>setTimeout(resolve,0));
     }
-    if(state.aiDifficulty==='hard'&&!successful.length){
-      const combinations=await searchMasterCombinations(targets,isCurrent);if(!isCurrent())return null;successful.push(...combinations);
-      const tactical=await searchMasterAttacks(targets,isCurrent,null,attempts);if(!isCurrent())return null;successful.push(...tactical);
+    if(state.aiDifficulty==='hard'){
+      const directAvailable=successful.length>0;
+      if(!directAvailable){const combinations=await searchMasterCombinations(targets,isCurrent);if(!isCurrent())return null;successful.push(...combinations);}
+      // Compare banks even when a direct pot exists: its leave may be better.
+      const tactical=await searchMasterAttacks(targets,isCurrent,directAvailable?'bank':null,attempts);if(!isCurrent())return null;successful.push(...tactical);
     }
     successful.sort((a,b)=>a.score-b.score);
     if(successful.length){
       // Test small input variations before ranking finalists. Difficulty
       // changes choice among validated shots, never the launch physics.
       let finalists=successful.slice(0,state.aiDifficulty==='easy'?3:state.aiDifficulty==='hard'?18:6);
-      if(state.aiDifficulty==='hard'){const refined=await refineMasterPosition(finalists,isCurrent);if(!refined)return null;if(refined.length){
+      if(state.aiDifficulty==='hard'){
+        // Reserve a bank seed so many direct-angle variants cannot crowd it out.
+        const bank=successful.find(p=>p.type==='bank');
+        if(bank)finalists=[...finalists.slice(0,2),bank,...finalists.slice(2)];
+        const refined=await refineMasterPosition(finalists,isCurrent);if(!refined)return null;if(refined.length){
         const candidates=preferClosePlans([...refined,...finalists]).sort((a,b)=>a.score-b.score),seen=new Set();finalists=[];
         for(const plan of candidates){
           const key=[plan.target,plan.potTarget,plan.pocket,Math.round(plan.power/8),Math.round((plan.spinY||0)*3),Math.round((plan.spinX||0)*3),Math.round(plan.aim*1500)].join(':');
@@ -1196,7 +1220,7 @@
       const best=pool[Math.floor(Math.random()*pool.length)];
       // Stability ranks attacks; it never replaces an available pot with a
       // snooker. Master keeps its offensive intent on difficult opportunities.
-      best.description=best.winning?'决胜出杆 · 尝试打进决胜球':`${best.target} 号 → ${POCKETS[best.pocket].name} · ${best.type==='bank'?(POCKETS[best.pocket].x===W/2?'翻中袋 · ':'翻袋 · '):best.type==='kick'?'碰库勾球 · ':best.type==='combination'?`传 ${best.potTarget} 号 · `:''}${strokeName(best)}${best.cueRails>=2?` · 绕${best.cueRails}库走位`:''}${best.closeLeave?' · 近台叫位':best.positionPlanned?' · 留下一杆角度':''}`;
+      best.description=best.winning?'决胜出杆 · 尝试打进决胜球':`${best.target} 号 → ${POCKETS[best.pocket].name} · ${best.type==='bank'?(POCKETS[best.pocket].x===W/2?'翻中袋 · ':'翻袋 · '):best.type==='kick'?'碰库勾球 · ':best.type==='combination'?`传 ${best.potTarget} 号 · `:''}${strokeName(best)}${best.cueRails>=2?` · 绕${best.cueRails}库走位`:''}${best.clusterOpened?' · K球开局':''}${best.closeLeave?' · 近台叫位':best.positionPlanned?' · 留下一杆角度':''}`;
       return executeAIPlan(best);
     }
     if(state.aiDifficulty==='hard'&&attempts.length){
@@ -1258,14 +1282,28 @@
     state.aiThinking=true;state.aiPlan=null;say('电脑正在判断球路…');render();
     const plan=await chooseAIPlan(isCurrent);
     if(!isCurrent()||!plan)return;
-    state.aiPlan=plan;showAIStroke(plan);say(`电脑计划：${plan.description}`);render();
-    // Show the selected ball and pocket for a full 2.5 seconds before shooting.
-    setTimeout(()=>{
+    presentAIPlan(plan,isCurrent);
+  }
+  function aiPlanOpacity(now=performance.now()){
+    const elapsed=now-(state.aiPlanShownAt??now);
+    const t=clamp((elapsed-1800)/600,0,1);
+    return 1-t*t*(3-2*t);
+  }
+  function presentAIPlan(plan,isCurrent){
+    state.aiPlan=plan;state.aiPlanShownAt=performance.now();
+    showAIStroke(plan);say(`电脑计划：${plan.description}`);render();
+    const animate=()=>{
       if(!isCurrent())return;
+      const elapsed=performance.now()-state.aiPlanShownAt;
+      render();
+      // Let the selected tactic fade completely before the cue starts moving.
+      if(elapsed<2500){requestAnimationFrame(animate);return;}
       state.aiThinking=false;state.ballInHand=false;state.aim=plan.aim;state.power=plan.power;
       state.spinX=plan.spinX||0;state.spinY=plan.spinY||0;moveSpinDot();syncPowerUI();updateUI();fire(true,true);
-    },2500);
+    };
+    requestAnimationFrame(animate);
   }
+
   function validCuePosition(x,y) {
     return x>=R&&x<=(state.breaking?HEAD_LINE:W-R)&&y>=R&&y<=H-R&&activeBalls().every(b=>Math.hypot(b.x-x,b.y-y)>=2*R+.06);
   }
@@ -1372,8 +1410,10 @@
     else scheduleGuideSlice();
   }
   function scheduleGuideSlice(){if(!guideTimerPending){guideTimerPending=true;setTimeout(runGuideSlice,0);}}
-  let guideReachKey='',guideReach=0,guideApproach=[];
+  let guideReachKey='',guideReach=0,guideApproach=[],quickGuideKey='',quickGuideCache=null;
   function quickGuide(){
+    const key=guideKey();
+    if(key===quickGuideKey&&quickGuideCache)return quickGuideCache;
     const c=cue();if(!c||c.pocketed)return null;
     const a=state.aim-state.spinX/Math.max(1,Math.hypot(state.spinX,state.spinY))*.018,dx=Math.cos(a),dy=Math.sin(a);
     const hit=firstBallOnRay(c.x,c.y,dx,dy,[0]),boundary=firstBoundaryOnRay(c.x,c.y,dx,dy);
@@ -1422,7 +1462,8 @@
       cuePath=segment(probe,end,8);
       targetPath=segment(object,{x:hit.ball.x,y:hit.ball.y},11);
     }
-    return {shotPath:[{x:c.x,y:c.y},end],cuePath,targetPath,targetNumber:hasTarget?hit.ball.n:null,objectCenter:hasTarget?{x:hit.ball.x,y:hit.ball.y}:null,pending:true};
+    quickGuideKey=key;
+    return quickGuideCache={shotPath:[{x:c.x,y:c.y},end],cuePath,targetPath,targetNumber:hasTarget?hit.ball.n:null,objectCenter:hasTarget?{x:hit.ball.x,y:hit.ball.y}:null,pending:true};
   }
   function displayGuide(interactive=false){
     if(heldGuide)return heldGuide;
@@ -2104,12 +2145,19 @@
     drawPocketForeground();
     previousPaint=state.stroke?null:regions;paintPhase=state.phase;
     if(state.ballInHand){const c=cue(),p=worldToScreen(c.x,c.y);ctx.strokeStyle='#fff4a3';ctx.lineWidth=2;ctx.setLineDash([5,5]);ctx.beginPath();ctx.arc(p.x,p.y,24,0,Math.PI*2);ctx.stroke();ctx.setLineDash([]);}
-    if(state.aiThinking&&state.phase==='aim'&&!state.aiPlan){
-      ctx.save();ctx.fillStyle='rgba(5,20,30,.85)';ctx.strokeStyle='rgba(130,234,255,.62)';ctx.lineWidth=1.5;
-      ctx.beginPath();canvasRoundRect(ctx,460,332,480,125,18);ctx.fill();ctx.stroke();
-      ctx.fillStyle='#e4faff';ctx.textAlign='center';ctx.font='bold 24px sans-serif';ctx.fillText(state.aiPlan?`电脑 · ${state.aiPlan.type==='bank'?'翻袋进攻':state.aiPlan.type==='kick'?'勾球进攻':state.aiPlan.type==='snooker'?'斯诺克防守':state.aiPlan.type==='attack'?'选择进攻':'选择解球'}`:'电脑正在判断球路',700,373);
-      ctx.fillStyle='#a8ecff';ctx.font='17px sans-serif';ctx.fillText(state.aiPlan?.description||'检查遮挡、袋口与白球落点',700,405);
-      ctx.fillStyle='#86cbd5';ctx.font='13px sans-serif';ctx.fillText(state.aiPlan?'准备出杆 · 2.5 秒':'正在试算候选路线',700,433);ctx.restore();
+    if(state.aiThinking&&state.phase==='aim'){
+      const alpha=state.aiPlan?aiPlanOpacity():1;
+      if(alpha>0){
+        ctx.save();ctx.globalAlpha=alpha;ctx.fillStyle='rgba(5,20,30,.82)';ctx.strokeStyle='rgba(130,234,255,.45)';ctx.lineWidth=1;
+        ctx.beginPath();canvasRoundRect(ctx,390,320,620,150,18);ctx.fill();ctx.stroke();
+        ctx.fillStyle='#e4faff';ctx.textAlign='center';ctx.font='bold 23px sans-serif';
+        ctx.fillText(state.aiPlan?'电脑 · 本杆战术':'电脑正在判断球路',700,354);
+        const parts=(state.aiPlan?.description||'检查遮挡、袋口与白球落点').split(' · '),lines=[''];
+        for(const part of parts){const i=lines.length-1;if(lines[i]&&(lines[i]+' · '+part).length>29)lines.push(part);else lines[i]+=(lines[i]?' · ':'')+part;}
+        ctx.fillStyle='#c6edf4';ctx.font='18px sans-serif';
+        lines.slice(0,3).forEach((line,i)=>ctx.fillText(line,700,383+i*24,570));
+        ctx.restore();
+      }
     }
   }
   let aimFramePending=false,lastAimPaint=0;
@@ -2118,15 +2166,17 @@
     aimFramePending=true;
     requestAnimationFrame(now=>{
       aimFramePending=false;if(state.phase!=='aim')return;
-      const started=performance.now(),dragging=guideDragging();
+      const dragging=guideDragging();
       // Direction-only input does not need to rewrite scores, rules or buttons.
       if(dragging)syncAngleUI();else updateUI();
       render();
-      if(dragging&&Number.isFinite(now))adaptResolution(performance.now()-started,now-lastAimPaint,now);
+      // Keep native-refresh painting active through a drag, even between
+      // sparse touch packets. Never resize/clear the canvas during aiming.
       lastAimPaint=Number.isFinite(now)?now:0;
+      if(dragging)requestAimFrame();
     });
   }
-  const aimGain=.006,rulerGain=.002;
+  const aimGain=.025,rulerGain=.002;
   const sideways=()=>document.getElementById('mobile-pool-preview')?.classList.contains('is-landscape')||false;
   const aimScreenPoint=e=>sideways()?{x:e.clientY,y:-e.clientX}:{x:e.clientX,y:e.clientY};
   function pointerWorld(e){
@@ -2159,8 +2209,9 @@
         drag.axis={x:dx/length*sign,y:dy/length*sign};
       }
       if(drag.axis){const distance=dx*drag.axis.x+dy*drag.axis.y;
-        const extra=Math.max(0,Math.abs(distance)-100);
-        const degrees=distance*aimGain+Math.sign(distance)*extra*extra*.0003;
+        // Constant gain keeps reversals and long sweeps predictable; the ruler
+        // remains available for very fine adjustments.
+        const degrees=distance*aimGain;
         state.aim=drag.startAim+degrees*Math.PI/180;requestAimFrame();}
     }
   }

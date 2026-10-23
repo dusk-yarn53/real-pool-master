@@ -13,8 +13,8 @@ for(const rotated of [false,true]){
     const x=60+(30+distance)*12.8,y=75+25*12.8;
     g.canvas.handlers.pointerdown(event(x,y));assert.equal(aim(),0,'pointer-down snapped the aim');
     for(let i=1;i<=20;i++)g.canvas.handlers.pointermove(event(x,y+i*2));
-    flush();assert(Math.abs(aim()-.12)<.0002,`drag gain depends on cue distance: ${aim()}`);
-    g.canvas.handlers.pointerup(event(x,y+40));assert(Math.abs(aim()-.12)<.0002,'release snapped to touch point');
+    flush();assert(Math.abs(aim()-.5)<.0002,`drag gain depends on cue distance: ${aim()}`);
+    g.canvas.handlers.pointerup(event(x,y+40));assert(Math.abs(aim()-.5)<.0002,'release snapped to touch point');
   }
   for(const heading of [0,Math.PI/2,Math.PI,-Math.PI/2])for(const axis of ['x','y'])for(const steps of [1,20]){
     t.setGuideBalls([{n:0,x:30,y:25},{n:1,x:80,y:40}],heading);
@@ -22,7 +22,7 @@ for(const rotated of [false,true]){
     g.canvas.handlers.pointerdown(event(x,y));
     for(let i=1;i<=steps;i++)g.canvas.handlers.pointermove(event(x+(axis==='x'?80*i/steps:0),y+(axis==='y'?80*i/steps:0)));
     flush();const delta=(aim()-before+540)%360-180;
-    assert(Math.abs(delta-.24)<.0002,`direction or sampling changed gain: ${heading}/${axis}/${steps}: ${delta}`);
+    assert(Math.abs(delta-1)<.0002,`direction or sampling changed gain: ${heading}/${axis}/${steps}: ${delta}`);
     g.canvas.handlers.pointerup(event(x+(axis==='x'?80:0),y+(axis==='y'?80:0)));
     assert.equal(JSON.parse(w.render_game_to_text()).phase,'aim','cloth aiming accidentally fired a shot');
   }

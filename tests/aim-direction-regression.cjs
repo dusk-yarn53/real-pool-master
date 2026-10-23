@@ -18,13 +18,13 @@ for(const rotated of [false,true]){
    // Initial subpixel movement is perpendicular to the deliberate swipe.
    g.canvas.handlers.pointermove(e(400+(dy?.6:0),300+(dx?.6:0)));
    g.canvas.handlers.pointermove(e(400+dx,300+dy));g.canvas.handlers.pointerup(e(400+dx,300+dy));
-   const expected=Math.sign(dx||dy)*.48;
+   const expected=Math.sign(dx||dy)*2;
    assert(Math.abs(angleDelta(read(),before)-expected)<.0002,`axis dead zone ${degree}/${rotated}/${dx},${dy}`);drags++;
   }
  }
  // Cancel from another finger cannot roll back the active gesture.
  t.setGuideBalls([{n:0,x:50,y:25}],0);
  g.canvas.handlers.pointerdown(e(400,300));g.canvas.handlers.pointermove(e(480,300));
- g.canvas.handlers.pointercancel(e(480,300,2));g.canvas.handlers.pointerup(e(480,300));assert(Math.abs(read()-.48)<.0002);
+ g.canvas.handlers.pointercancel(e(480,300,2));g.canvas.handlers.pointerup(e(480,300));assert(Math.abs(read()-2)<.0002);
 }
 console.log(JSON.stringify({passed:true,taps,drags,fullCircle:true,initialJitterIgnored:true,rotatedInput:true}));
