@@ -1,0 +1,2 @@
+/* Host integration only; animation timing and artwork rendering remain upstream. */
+body.embedded #image-settings{display:none}
