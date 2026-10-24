@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>光域台球启动动画</title>
+<style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#08060d}video{display:block;width:100%;height:100%;object-fit:contain;pointer-events:none}</style></head>
+<body><video id="intro" autoplay muted playsinline preload="auto" disablepictureinpicture disableremoteplayback aria-label="欢迎回来，从这里开始你的下一次击球"></video>
+<script>
+(()=>{'use strict';const video=document.getElementById('intro');let finished=false;
+const send=action=>parent.postMessage({type:'aemeath-boot',action},location.origin);
+const finish=action=>{if(finished)return;finished=true;video.pause();send(action)};
+video.muted=true;video.defaultMuted=true;
+video.addEventListener('playing',()=>send('ready'),{once:true});
+video.addEventListener('ended',()=>finish('complete'),{once:true});
+video.addEventListener('error',()=>finish('assetError'),{once:true});
+video.src='./startup-video.mp4?v=20261025-video-v6';
+const start=video.play();if(start)start.catch(()=>finish('assetError'));
+})();
+</script></body></html>
