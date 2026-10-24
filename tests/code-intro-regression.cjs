@@ -17,11 +17,16 @@ function released(f){assert.equal(f.removed,1);assert.equal(f.done,1);assert.equ
 let f=run();assert(f.window.PoolIntro.active);assert.equal(f.frame.src,f.frame.dataset.src);assert.equal([...f.timers.values()][0].ms,25000);
 f.message('complete',{origin:'https://other.test'});f.message('complete',{source:{}});f.message('complete',{data:{type:'other',action:'complete'}});assert.equal(f.removed,0);
 f.message('ready');assert.equal(f.timers.size,1);assert.equal([...f.timers.values()][0].ms,16000);
-f.message('reveal');assert.equal(f.removed,0);f.message('complete');released(f);f.skip.click();released(f);
-for(const action of ['skip','assetError','error','timeout','pagehide']){f=run();if(action==='skip')f.skip.click();else if(action==='assetError')f.message(action);else if(action==='error')f.frameEvents.error();else if(action==='timeout')[...f.timers.values()][0].fn();else f.events.pagehide();released(f)}
+f.message('reveal');assert.equal(f.removed,0);f.message('complete');released(f);f.message('complete');released(f);
+for(const action of ['assetError','error','timeout','pagehide']){f=run();if(action==='assetError')f.message(action);else if(action==='error')f.frameEvents.error();else if(action==='timeout')[...f.timers.values()][0].fn();else f.events.pagehide();released(f)}
 for(const args of [[true],[false,'?test=loading']]){f=run(...args);released(f);assert.equal(f.frame.src,undefined)}
 function checkMirror(dir){for(const entry of fs.readdirSync(path.join(root,dir),{withFileTypes:true})){const p=dir+'/'+entry.name;if(entry.isDirectory())checkMirror(p);else assert.deepEqual(fs.readFileSync(path.join(root,p)),fs.readFileSync(path.join(root,'play',p)),p)}}
-checkMirror('startup-animation');
-assert.match(read('startup-animation/animation.js'),/duration\s*=\s*12000/);
-assert(read('startup-animation/assets/config.js').includes('欢迎回来，击打'));
-console.log('PASS: original animation, mirror parity, trusted messages, completion, skip, failure, timeout and reduced-motion lifecycle');
+assert(!html.includes('codeIntroSkip'));
+assert(html.includes('video-intro.html?v=20261025-video-v6'));
+const videoHtml=read('video-intro.html');
+assert(videoHtml.includes('autoplay muted playsinline'));
+assert(!videoHtml.includes(' controls'));
+assert(videoHtml.includes("addEventListener('ended'"));
+assert(videoHtml.includes("start.catch(()=>finish('assetError'))"));
+assert(fs.statSync(path.join(root,'startup-video.mp4')).size>1000000);
+console.log('PASS: video intro, no skip control, mirror parity, trusted messages, completion, failure, timeout and reduced-motion lifecycle');
