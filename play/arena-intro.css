@@ -1,0 +1,20 @@
+/* Original web implementation inspired by yanami-sec's radar/reveal/shutter sequence.
+   No upstream code, portraits or artwork are distributed. */
+#mobile-pool-preview .code-intro{background:#050c12;--intro-duration:3600ms}
+#mobile-pool-preview .code-intro.active{transition:clip-path .38s ease,opacity .38s ease;clip-path:inset(0)}
+#mobile-pool-preview .code-intro.leaving{clip-path:inset(49.9% 0);opacity:0}
+.code-intro .code-intro__streams{display:none}
+.code-intro .arena-reveal{position:absolute;inset:0;background:linear-gradient(#06131b55,#06131bbd),url('./assets/fuguang-arena.jpg') center/cover;animation:arenaReveal var(--intro-duration) ease both}
+.code-intro .code-intro__center{animation:arenaIdentity var(--intro-duration) ease both}
+.code-intro .code-intro__mark{position:relative;width:clamp(70px,20vh,150px);background:radial-gradient(circle at 35% 25%,#596775,#09111b 65%);border:1px solid #c6eeff;box-shadow:0 0 35px #69d4fa40,inset 0 0 24px #000;font:bold clamp(32px,8vh,60px) Georgia;color:#fff}
+.code-intro .code-intro__mark:before,.code-intro .code-intro__mark:after{content:"";position:absolute;inset:-14px;border:1px dashed #94d9ec88;border-radius:50%;animation:arenaOrbit 4s linear infinite}
+.code-intro .code-intro__mark:after{inset:-25px;border:2px solid transparent;border-top-color:#b0e6f2;border-bottom-color:#b0e6f2;animation-direction:reverse}
+.code-intro .code-intro__center h2{margin-top:42px;font-weight:500;letter-spacing:.12em}
+.code-intro .code-intro__center p{font-size:12px;letter-spacing:.15em}
+.code-intro .code-intro__line:after{background:#9de7ff}
+@keyframes arenaOrbit{to{transform:rotate(360deg)}}
+@keyframes arenaReveal{0%,30%{opacity:0;clip-path:inset(0 50%)}70%,100%{opacity:1;clip-path:inset(0)}}
+@keyframes arenaIdentity{0%{opacity:0;transform:scale(.85)}18%,70%{opacity:1;transform:scale(1)}100%{opacity:1;transform:scale(.96)}}
+@media(max-width:720px){#mobile-pool-preview .code-intro{--intro-duration:2800ms}}
+@media(prefers-reduced-motion:reduce){.code-intro .arena-reveal,.code-intro .code-intro__center,.code-intro .code-intro__mark:before,.code-intro .code-intro__mark:after{animation:none}}
+.code-intro.low-power .code-intro__mark:before,.code-intro.low-power .code-intro__mark:after{animation:none}
