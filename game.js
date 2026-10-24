@@ -1837,7 +1837,7 @@
     if(!b.sprite)renderBallSprite(b);
     const {x,y}=worldToScreen(worldX,worldY),rr=DISPLAY_R*SCALE*scale;
     ctx.save();ctx.globalAlpha=alpha;
-    if(scale===1&&POCKET_GEOMETRY.some(p=>Math.hypot(worldX-p.mx,worldY-p.my)<p.radius+R+1.1)){traceBallSupport();ctx.clip();}
+    if(scale===1){traceBallSupport();ctx.clip();}
     const speed=Math.hypot(b.vx,b.vy);
     if(!MOBILE_RENDER&&state.phase==='moving'&&scale===1&&speed>28){
       const trail=Math.min(7,speed*.048),weight=Math.min(.16,speed/900);
