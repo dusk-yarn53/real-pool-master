@@ -10,8 +10,8 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='15' fill='%23121a20'/%3E%3Ccircle cx='16' cy='16' r='7' fill='white'/%3E%3Ctext x='16' y='20' text-anchor='middle' font-size='12'%3E8%3C/text%3E%3C/svg%3E">
   <link rel="preload" href="./assets/fuguang-arena.jpg" as="image">
   <title>光域台球 · 浮光竞技馆</title>
-  <link rel="preload" href="./site.css?v=20261024-radar-rail-v4" as="style">
-<link id="siteStyle" rel="stylesheet" href="./site.css?v=20261024-radar-rail-v4" media="print" onload="this.media='all';window.PoolStartup?.ready('styles')" onerror="this.dataset.failed='true';window.PoolStartup?.styleFailed()">
+  <link rel="preload" href="./site.css?v=20261024-original-intro-v5" as="style">
+<link id="siteStyle" rel="stylesheet" href="./site.css?v=20261024-original-intro-v5" media="print" onload="this.media='all';window.PoolStartup?.ready('styles')" onerror="this.dataset.failed='true';window.PoolStartup?.styleFailed()">
   <!-- CRITICAL_STYLE_START -->
   <style>/* Always show a landscape game; no orientation gate or blocked controls. */
 #mobile-pool-preview.phone-landscape{position:relative!important;width:100%!important;height:var(--phone-height)!important;min-height:0!important;overflow:hidden!important;padding:0!important}
@@ -201,89 +201,46 @@ html,body{margin:0;background:#040b17;color:#e7f7ff;font-family:system-ui,"PingF
 @media(prefers-reduced-motion:reduce){.code-intro__lane,.code-intro__line:after{animation:none!important}.code-intro.active{transition:none!important}}
 </style>
 <!-- CODE_INTRO_STYLE_END -->
-<link rel="stylesheet" href="./arena-intro.css?v=20261024-radar-rail-v4">
 </head>
 <body id="mobile-pool-preview" data-screen="welcome">
 <audio id="entryMusic" src="./sounds/xiaotang-intro.mp3" autoplay loop preload="auto" playsinline hidden></audio>
   <div class="mobile-game-surface">
 
 <!-- CODE_INTRO_START -->
-<section class="code-intro" id="codeIntro" aria-label="光域台球雷达启动动画">
-  <div class="arena-reveal" aria-hidden="true"></div>
-  <div class="code-intro__top"><strong>光域台球 / GUANGYU</strong><button id="codeIntroSkip" class="code-intro__skip" type="button">跳过动画 →</button></div>
-  <div class="code-intro__streams" aria-hidden="true">
-    <pre class="code-intro__lane" style="--lane:0">const arena = init();
-load(physics);
-cue.angle += delta;
-if (contact) resolve(impact);
-render(table);
-frame += 1;
-await assets();</pre>
-    <pre class="code-intro__lane" style="--lane:1">vec3 light = key;
-normal = surface;
-roughness = .28;
-shade(ball);
-sample(velocity);
-collide(cushion);
-pocket.depth += g;</pre>
-    <pre class="code-intro__lane" style="--lane:2">engine.tick(180);
-aim = normalize(v);
-force = 0.56;
-apply(cue, force);
-spin.y = -0.6;
-const next = plan();
-check(firstHit);</pre>
-    <pre class="code-intro__lane" style="--lane:3">[SYSTEM] BOOT
-[CHECK] COLLISION
-[PASS] CUSHIONS
-[CHECK] POCKETS
-[PASS] GRAVITY
-[CHECK] AUDIO
-[READY] ARENA</pre>
-    <pre class="code-intro__lane" style="--lane:4">const path = [];
-for (ball of rack) {
- path.push(ball);
-}
-interpolate(dt);
-mix(ambient);
-reflect(light);</pre>
-    <pre class="code-intro__lane" style="--lane:5">SHOT / PREPARE
-ANGLE  00.008
-POWER  56.0%
-SPIN   CENTER
-BALLS  01 - 15
-TABLE  C1
-BEGIN  SESSION</pre>
-  </div>
-  <div class="code-intro__center"><div class="code-intro__mark" aria-hidden="true">8</div><h2>欢迎回来，击打</h2><p>光域台球 · 让下一杆更精彩</p></div>
-  <div class="code-intro__foot"><span>INITIALIZING / 01</span><span class="code-intro__line" aria-hidden="true"></span><span>FUGUANG ARENA</span></div>
+<section id="codeIntro" class="original-intro" aria-label="光域台球完整启动动画">
+  <button id="codeIntroSkip" type="button">跳过动画 →</button>
+  <iframe id="originalIntro" title="光域台球启动动画" data-src="./startup-animation/index.html?embedded=1" sandbox="allow-scripts allow-same-origin" tabindex="-1"></iframe>
 </section>
+<style>
+.original-intro{position:fixed;inset:0;z-index:520;background:#08060d;overflow:hidden}
+.original-intro iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.original-intro>button{position:absolute;z-index:2;right:18px;top:16px;min-height:44px;padding:10px 16px;background:#101720bb;border:1px solid #ffffff55;border-radius:5px;color:white;cursor:pointer}
+</style>
 <script>
 (() => {
  'use strict';
- const panel=document.getElementById('codeIntro');
- if(!panel)return;
+ const panel=document.getElementById('codeIntro'),frame=document.getElementById('originalIntro');
+ if(!panel||!frame)return;
  window.PoolIntro={active:true};
- let released=false;
+ let released=false,timer;
  const release=()=>{
-  if(released)return;
-  released=true;
-  panel.remove();
-  window.PoolIntro.active=false;
+  if(released)return;released=true;
+  window.clearTimeout(timer);
+  window.removeEventListener('message',message);
+  panel.remove();window.PoolIntro.active=false;
   window.dispatchEvent(new Event('poolintro:done'));
  };
- const reduced=window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
- const lowPower=!!(navigator.connection?.saveData||(navigator.deviceMemory&&navigator.deviceMemory<=2)||(navigator.hardwareConcurrency&&navigator.hardwareConcurrency<=2));
- const loadingPreview=new URLSearchParams(location.search).get('test')==='loading';
- if(reduced||loadingPreview){release();return;}
- if(lowPower)panel.classList.add('low-power');
- panel.classList.add('active');
- const leave=()=>{if(released)return;panel.classList.add('leaving');window.setTimeout(release,380);};
- document.getElementById('codeIntroSkip')?.addEventListener('click',leave,{once:true});
- const compact=window.matchMedia?.('(max-width: 720px)')?.matches;
- window.setTimeout(leave,lowPower?1400:compact?2800:3600);
- window.setTimeout(release,5200);
- document.addEventListener('visibilitychange',()=>{if(document.hidden)release();});
+ const message=e=>{
+  if(e.source!==frame.contentWindow||e.origin!==location.origin||e.data?.type!=='aemeath-boot')return;
+  if(e.data.action==='complete'||e.data.action==='assetError')release();
+  else if(e.data.action==='ready'){window.clearTimeout(timer);timer=window.setTimeout(release,16000);}
+ };
+ if(window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches||new URLSearchParams(location.search).get('test')==='loading'){release();return;}
+ window.addEventListener('message',message);
+ document.getElementById('codeIntroSkip')?.addEventListener('click',release,{once:true});
+ frame.addEventListener('error',release,{once:true});
+ timer=window.setTimeout(release,25000);
+ frame.src=frame.dataset.src;
  window.addEventListener('pagehide',release,{once:true});
 })();
 </script>
@@ -462,7 +419,7 @@ BEGIN  SESSION</pre>
   const retryEngine=()=>{
     if(!engineFailed||tasks.has('game'))return;
     engineFailed=false;status.textContent='正在重新连接比赛引擎';skip.textContent='继续等待';
-    const old=$('gameEngine'),script=document.createElement('script');script.id='gameEngine';script.async=true;script.src='./game.js?v=20261024-radar-rail-v4&retry='+String(++engineRetry);script.onerror=failEngine;old?.remove();document.body.appendChild(script);
+    const old=$('gameEngine'),script=document.createElement('script');script.id='gameEngine';script.async=true;script.src='./game.js?v=20261024-original-intro-v5&retry='+String(++engineRetry);script.onerror=failEngine;old?.remove();document.body.appendChild(script);
   };
   window.PoolStartup={ready,engineFailed:failEngine,styleFailed};
   const stylesheet=$('siteStyle');if(stylesheet?.sheet)ready('styles');else if(stylesheet?.dataset?.failed==='true')styleFailed();
@@ -470,7 +427,7 @@ BEGIN  SESSION</pre>
   skip.addEventListener('click',()=>{
     if(essentialReady()){finish();return;}
     if(engineFailed)retryEngine();
-    if(stylesFailed){stylesFailed=false;stylesheet.href='./site.css?v=20261024-radar-rail-v4&retry='+String(Date.now());status.textContent='正在重新加载赛场画面';skip.textContent='继续等待';}
+    if(stylesFailed){stylesFailed=false;stylesheet.href='./site.css?v=20261024-original-intro-v5&retry='+String(Date.now());status.textContent='正在重新加载赛场画面';skip.textContent='继续等待';}
     if(!engineFailed&&!stylesFailed)help.textContent='仍在等待网络响应，请保持此页打开，无需反复刷新';
   });
   setTimeout(()=>{if(dismissed||essentialReady())return;if(!engineFailed&&!stylesFailed){status.textContent='网络连接较慢，仍在等待';help.textContent='请保持此页打开；资源完成后会自动进入';}},12000);
@@ -481,8 +438,8 @@ BEGIN  SESSION</pre>
 })();
 </script>
   <!-- STARTUP_SCRIPT_END -->
-  <script id="gameEngine" async src="./game.js?v=20261024-radar-rail-v4" onerror="window.PoolStartup.engineFailed()"></script>
-  <script async src="./audio.js?v=20261024-radar-rail-v4"></script>
-  <script async src="./mobile.js?v=20261024-radar-rail-v4"></script>
+  <script id="gameEngine" async src="./game.js?v=20261024-original-intro-v5" onerror="window.PoolStartup.engineFailed()"></script>
+  <script async src="./audio.js?v=20261024-original-intro-v5"></script>
+  <script async src="./mobile.js?v=20261024-original-intro-v5"></script>
 </body>
 </html>
