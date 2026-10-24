@@ -10,8 +10,8 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='15' fill='%23121a20'/%3E%3Ccircle cx='16' cy='16' r='7' fill='white'/%3E%3Ctext x='16' y='20' text-anchor='middle' font-size='12'%3E8%3C/text%3E%3C/svg%3E">
   <link rel="preload" href="./assets/fuguang-arena.jpg" as="image">
   <title>光域台球 · 浮光竞技馆</title>
-  <link rel="preload" href="./site.css?v=20261024-drag-tactics-v3" as="style">
-<link id="siteStyle" rel="stylesheet" href="./site.css?v=20261024-drag-tactics-v3" media="print" onload="this.media='all';window.PoolStartup?.ready('styles')" onerror="this.dataset.failed='true';window.PoolStartup?.styleFailed()">
+  <link rel="preload" href="./site.css?v=20261024-radar-rail-v4" as="style">
+<link id="siteStyle" rel="stylesheet" href="./site.css?v=20261024-radar-rail-v4" media="print" onload="this.media='all';window.PoolStartup?.ready('styles')" onerror="this.dataset.failed='true';window.PoolStartup?.styleFailed()">
   <!-- CRITICAL_STYLE_START -->
   <style>/* Always show a landscape game; no orientation gate or blocked controls. */
 #mobile-pool-preview.phone-landscape{position:relative!important;width:100%!important;height:var(--phone-height)!important;min-height:0!important;overflow:hidden!important;padding:0!important}
@@ -201,13 +201,15 @@ html,body{margin:0;background:#040b17;color:#e7f7ff;font-family:system-ui,"PingF
 @media(prefers-reduced-motion:reduce){.code-intro__lane,.code-intro__line:after{animation:none!important}.code-intro.active{transition:none!important}}
 </style>
 <!-- CODE_INTRO_STYLE_END -->
+<link rel="stylesheet" href="./arena-intro.css?v=20261024-radar-rail-v4">
 </head>
 <body id="mobile-pool-preview" data-screen="welcome">
 <audio id="entryMusic" src="./sounds/xiaotang-intro.mp3" autoplay loop preload="auto" playsinline hidden></audio>
   <div class="mobile-game-surface">
 
 <!-- CODE_INTRO_START -->
-<section class="code-intro" id="codeIntro" aria-label="光域台球代码启动动画">
+<section class="code-intro" id="codeIntro" aria-label="光域台球雷达启动动画">
+  <div class="arena-reveal" aria-hidden="true"></div>
   <div class="code-intro__top"><strong>光域台球 / GUANGYU</strong><button id="codeIntroSkip" class="code-intro__skip" type="button">跳过动画 →</button></div>
   <div class="code-intro__streams" aria-hidden="true">
     <pre class="code-intro__lane" style="--lane:0">const arena = init();
@@ -253,7 +255,7 @@ BALLS  01 - 15
 TABLE  C1
 BEGIN  SESSION</pre>
   </div>
-  <div class="code-intro__center" aria-hidden="true"><div class="code-intro__mark">GY</div><h2>光域台球</h2><p>ENGINE INITIALIZING · 竞技馆即将开启</p></div>
+  <div class="code-intro__center"><div class="code-intro__mark" aria-hidden="true">8</div><h2>欢迎回来，击打</h2><p>光域台球 · 让下一杆更精彩</p></div>
   <div class="code-intro__foot"><span>INITIALIZING / 01</span><span class="code-intro__line" aria-hidden="true"></span><span>FUGUANG ARENA</span></div>
 </section>
 <script>
@@ -460,7 +462,7 @@ BEGIN  SESSION</pre>
   const retryEngine=()=>{
     if(!engineFailed||tasks.has('game'))return;
     engineFailed=false;status.textContent='正在重新连接比赛引擎';skip.textContent='继续等待';
-    const old=$('gameEngine'),script=document.createElement('script');script.id='gameEngine';script.async=true;script.src='./game.js?v=20261024-drag-tactics-v3&retry='+String(++engineRetry);script.onerror=failEngine;old?.remove();document.body.appendChild(script);
+    const old=$('gameEngine'),script=document.createElement('script');script.id='gameEngine';script.async=true;script.src='./game.js?v=20261024-radar-rail-v4&retry='+String(++engineRetry);script.onerror=failEngine;old?.remove();document.body.appendChild(script);
   };
   window.PoolStartup={ready,engineFailed:failEngine,styleFailed};
   const stylesheet=$('siteStyle');if(stylesheet?.sheet)ready('styles');else if(stylesheet?.dataset?.failed==='true')styleFailed();
@@ -468,7 +470,7 @@ BEGIN  SESSION</pre>
   skip.addEventListener('click',()=>{
     if(essentialReady()){finish();return;}
     if(engineFailed)retryEngine();
-    if(stylesFailed){stylesFailed=false;stylesheet.href='./site.css?v=20261024-drag-tactics-v3&retry='+String(Date.now());status.textContent='正在重新加载赛场画面';skip.textContent='继续等待';}
+    if(stylesFailed){stylesFailed=false;stylesheet.href='./site.css?v=20261024-radar-rail-v4&retry='+String(Date.now());status.textContent='正在重新加载赛场画面';skip.textContent='继续等待';}
     if(!engineFailed&&!stylesFailed)help.textContent='仍在等待网络响应，请保持此页打开，无需反复刷新';
   });
   setTimeout(()=>{if(dismissed||essentialReady())return;if(!engineFailed&&!stylesFailed){status.textContent='网络连接较慢，仍在等待';help.textContent='请保持此页打开；资源完成后会自动进入';}},12000);
@@ -479,8 +481,8 @@ BEGIN  SESSION</pre>
 })();
 </script>
   <!-- STARTUP_SCRIPT_END -->
-  <script id="gameEngine" async src="./game.js?v=20261024-drag-tactics-v3" onerror="window.PoolStartup.engineFailed()"></script>
-  <script async src="./audio.js?v=20261024-drag-tactics-v3"></script>
-  <script async src="./mobile.js?v=20261024-drag-tactics-v3"></script>
+  <script id="gameEngine" async src="./game.js?v=20261024-radar-rail-v4" onerror="window.PoolStartup.engineFailed()"></script>
+  <script async src="./audio.js?v=20261024-radar-rail-v4"></script>
+  <script async src="./mobile.js?v=20261024-radar-rail-v4"></script>
 </body>
 </html>
