@@ -7,4 +7,7 @@ html=html.replace(/<!-- CRITICAL_STYLE_START -->[\s\S]*?<!-- CRITICAL_STYLE_END 
 ${read('smooth-quality.css')}</style>\n  <!-- CRITICAL_STYLE_END -->`);
 html=html.replace(/<!-- STARTUP_SCRIPT_START -->[\s\S]*?<!-- STARTUP_SCRIPT_END -->/,`<!-- STARTUP_SCRIPT_START -->\n  <script>${read('landscape.js')}\n${read('startup.js')}</script>\n  <!-- STARTUP_SCRIPT_END -->`);
 fs.writeFileSync(path.join(root,'index.html'),html);
+fs.mkdirSync(path.join(root,'play'),{recursive:true});
+for(const name of ['index.html','site.css','startup.js'])fs.copyFileSync(path.join(root,name),path.join(root,'play',name));
 console.log('Built one stylesheet and inline critical startup.');
+
