@@ -720,6 +720,7 @@
       const nx=(p.x-target.x)/pd,ny=(p.y-target.y)/pd,gx=target.x-2*R*nx,gy=target.y-2*R*ny;
       const cd=Math.hypot(gx-c.x,gy-c.y),cos=((gx-c.x)*nx+(gy-c.y)*ny)/Math.max(cd,.01);
       if(cd<5||cos<.55||gx<R||gx>W-R||gy<R||gy>H-R||!lineClearIn(balls,c.x,c.y,gx,gy,[0,target.n]))continue;
+      if(attackRisk({pd,cd,cos},target).unrealistic)continue;
       if(Math.min(c.x,W-c.x,c.y,H-c.y)<R+.7)continue;
       const distance=Math.max(cd,Math.hypot(target.x-c.x,target.y-c.y));
       if(distance<best.distance)best={close:distance<=MASTER_NEAR_DISTANCE,distance,target:target.n,pocket};
@@ -746,10 +747,6 @@
   }
   function leaveMetadata(result){
     return {clusterOpened:clusterBreakValue(result),closeLeave:closePosition(result).close,cueRails:(result.cushionHits||[]).filter(h=>h.n===0&&!h.beforeFirstHit&&!h.jaw).length};
-  }
-  function preferClosePlans(plans){
-    const near=plans.filter(p=>p.closeLeave);
-    return near.length?near:plans;
   }
   function masterPositionScore(result){
     if(result.winning)return -60;
@@ -851,7 +848,7 @@
     }
     // Re-seed after the broad search so fine control reaches newly found
     // short leaves too. Integer power matches the actual executed stroke.
-    const fineSeeds=preferClosePlans(refined).slice().sort((a,b)=>a.score-b.score).slice(0,3);
+    const fineSeeds=refined.slice().sort((a,b)=>a.score-b.score).slice(0,3);
     for(const base of fineSeeds)for(const delta of [-1,0,1])for(const dy of [-.05,0,.05]){
       if(!isCurrent())return null;
       const sy=clamp((base.spinY||0)+dy,-.95,.95);
@@ -864,7 +861,7 @@
       if(++count%2===0)await new Promise(resolve=>setTimeout(resolve,0));
     }
     const angleSeen=new Set(),angleSeeds=[...candidates];
-    for(const plan of preferClosePlans(refined).slice().sort((a,b)=>a.score-b.score)){
+    for(const plan of refined.slice().sort((a,b)=>a.score-b.score)){
       const key=[plan.target,plan.pocket,Math.round(plan.power/5),Math.sign(plan.spinX||0),Math.round((plan.spinY||0)*2)].join(':');
       if(angleSeen.has(key))continue;angleSeen.add(key);angleSeeds.push(plan);if(angleSeen.size===24)break;
     }
@@ -1191,7 +1188,9 @@
         const bank=successful.find(p=>p.type==='bank');
         if(bank)finalists=[...finalists.slice(0,2),bank,...finalists.slice(2)];
         const refined=await refineMasterPosition(finalists,isCurrent);if(!refined)return null;if(refined.length){
-        const candidates=preferClosePlans([...refined,...finalists]).sort((a,b)=>a.score-b.score),seen=new Set();finalists=[];
+        // Distance already contributes to the position score. Keep longer,
+        // straighter leaves available for the same physical stability checks.
+        const candidates=[...refined,...finalists].sort((a,b)=>a.score-b.score),seen=new Set();finalists=[];
         for(const plan of candidates){
           const key=[plan.target,plan.potTarget,plan.pocket,Math.round(plan.power/8),Math.round((plan.spinY||0)*3),Math.round((plan.spinX||0)*3),Math.round(plan.aim*1500)].join(':');
           if(seen.has(key))continue;seen.add(key);finalists.push(plan);if(finalists.length===32)break;
@@ -1213,7 +1212,7 @@
         plan.score+=(checks-robust)*(state.aiDifficulty==='hard'?60:12)+scratchRisk*80+leaveDrift/checks*.6;plan.robustness=robust/checks;plan.closeRobustness=closeChecks/checks;
         await new Promise(resolve=>setTimeout(resolve,0));
       }
-      if(state.aiDifficulty==='hard'){const stable=finalists.filter(p=>p.closeLeave&&p.closeRobustness>=.75&&p.robustness>=.75);if(stable.length)finalists=stable;}
+      if(state.aiDifficulty==='hard'){const stable=finalists.filter(p=>p.robustness>=.75);if(stable.length)finalists=stable;}
       finalists.sort((a,b)=>a.score-b.score);
       const margin=state.aiDifficulty==='easy'?20:state.aiDifficulty==='normal'?5:0;
       const pool=finalists.filter(p=>p.score<=finalists[0].score+margin);
@@ -2499,3 +2498,4 @@
   cueTexture=buildCueTexture();
   syncPowerUI();render();requestAnimationFrame(frame);window.PoolStartup?.ready('game');
 })();
+
