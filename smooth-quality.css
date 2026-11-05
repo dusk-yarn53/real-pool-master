@@ -56,3 +56,18 @@
 #mobile-pool-preview.phone-landscape .boot-stages span{padding-top:7px}
 @media(max-width:600px) and (orientation:portrait){.boot-session{top:18%;width:80%}.boot-session h2{font-size:38px}.boot-ball-detail{bottom:38%}.boot-stages{bottom:30%;left:7%}#mobile-pool-preview .boot .flight-copy,#mobile-pool-preview .boot .flight-route,#mobile-pool-preview .boot .flight-bottom,#mobile-pool-preview .boot .flight-help{width:100%}}
 @media(prefers-reduced-motion:reduce){.boot-light,.boot-ball{animation:none!important}}
+
+/* Short transitions keep navigation continuous without delaying controls. */
+#mobile-pool-preview .setup-step:not(.hidden),
+#mobile-pool-preview #resultOverlay:not(.hidden) .result-card,
+#mobile-pool-preview #practiceOverlay:not(.hidden)>div,
+#mobile-pool-preview #rulesOverlay:not(.hidden)>div{animation:panel-arrive .2s cubic-bezier(.2,.7,.2,1) both}
+@keyframes panel-arrive{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+#mobile-pool-preview .setup-grid>button{transition:background-color .16s,border-color .16s,transform .16s;touch-action:manipulation}
+#mobile-pool-preview .setup-grid>button:active{transform:scale(.985)}
+#mobile-pool-preview button:focus-visible{outline:2px solid #e7cf99;outline-offset:4px}
+#mobile-pool-preview .setup-step h1:focus{outline:none}
+#mobile-pool-preview .setup-progress span{transition:color .18s,border-color .18s}
+#mobile-pool-preview .setup-grid>button small{line-height:1.5}
+@media(hover:hover){#mobile-pool-preview .setup-grid>button:hover{border-color:#d6bc82;background-color:#24313b}}
+@media(prefers-reduced-motion:reduce){#mobile-pool-preview .setup-step,#mobile-pool-preview .result-card,#mobile-pool-preview #practiceOverlay>div,#mobile-pool-preview #rulesOverlay>div{animation:none!important}#mobile-pool-preview .setup-grid>button,#mobile-pool-preview .setup-progress span{transition:none!important}}
