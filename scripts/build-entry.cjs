@@ -8,8 +8,8 @@ ${read('smooth-quality.css')}</style>\n  <!-- CRITICAL_STYLE_END -->`);
 html=html.replace(/<!-- STARTUP_SCRIPT_START -->[\s\S]*?<!-- STARTUP_SCRIPT_END -->/,`<!-- STARTUP_SCRIPT_START -->\n  <script>${read('landscape.js')}\n${read('startup.js')}</script>\n  <!-- STARTUP_SCRIPT_END -->`);
 fs.writeFileSync(path.join(root,'index.html'),html);
 fs.mkdirSync(path.join(root,'play'),{recursive:true});
-for(const name of ['index.html','site.css','startup.js'])fs.copyFileSync(path.join(root,name),path.join(root,'play',name));
-const playIndex=path.join(root,'play','index.html');
-fs.writeFileSync(playIndex,fs.readFileSync(playIndex,'utf8').replaceAll('href="./assets/icons/','href="../assets/icons/').replace('href="./manifest.webmanifest"','href="../manifest.webmanifest"'));
+for(const name of ['index.html','site.css','startup.js','manifest.webmanifest'])fs.copyFileSync(path.join(root,name),path.join(root,'play',name));
+fs.mkdirSync(path.join(root,'play','assets','icons'),{recursive:true});
+for(const size of [48,180,192,512])fs.copyFileSync(path.join(root,'assets','icons',`app-icon-${size}.png`),path.join(root,'play','assets','icons',`app-icon-${size}.png`));
 console.log('Built one stylesheet and inline critical startup.');
 
