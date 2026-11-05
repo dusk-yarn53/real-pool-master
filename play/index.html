@@ -7,11 +7,16 @@
   <meta name="referrer" content="no-referrer">
   <meta name="theme-color" content="#050a18">
   <meta name="description" content="光域台球浮光竞技馆，支持八球、九球、人机对战、专项训练与双人同屏。">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='15' fill='%23121a20'/%3E%3Ccircle cx='16' cy='16' r='7' fill='white'/%3E%3Ctext x='16' y='20' text-anchor='middle' font-size='12'%3E8%3C/text%3E%3C/svg%3E">
+  <link rel="icon" type="image/png" href="../assets/icons/app-icon-48.png">
+  <link rel="apple-touch-icon" href="../assets/icons/app-icon-180.png">
+  <link rel="manifest" href="../manifest.webmanifest">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="光域台球">
   <link rel="preload" href="./assets/fuguang-arena.jpg" as="image">
   <title>光域台球 · 浮光竞技馆</title>
-  <link rel="preload" href="./site.css?v=20261024-original-intro-v5" as="style">
-<link id="siteStyle" rel="stylesheet" href="./site.css?v=20261024-original-intro-v5" media="print" onload="this.media='all';window.PoolStartup?.ready('styles')" onerror="this.dataset.failed='true';window.PoolStartup?.styleFailed()">
+  <link rel="preload" href="./site.css?v=20261105-polish-v1" as="style">
+<link id="siteStyle" rel="stylesheet" href="./site.css?v=20261105-polish-v1" media="print" onload="this.media='all';window.PoolStartup?.ready('styles')" onerror="this.dataset.failed='true';window.PoolStartup?.styleFailed()">
   <!-- CRITICAL_STYLE_START -->
   <style>/* Always show a landscape game; no orientation gate or blocked controls. */
 #mobile-pool-preview.phone-landscape{position:relative!important;width:100%!important;height:var(--phone-height)!important;min-height:0!important;overflow:hidden!important;padding:0!important}
@@ -169,6 +174,21 @@ html,body{margin:0;background:#040b17;color:#e7f7ff;font-family:system-ui,"PingF
 #mobile-pool-preview.phone-landscape .boot-stages span{padding-top:7px}
 @media(max-width:600px) and (orientation:portrait){.boot-session{top:18%;width:80%}.boot-session h2{font-size:38px}.boot-ball-detail{bottom:38%}.boot-stages{bottom:30%;left:7%}#mobile-pool-preview .boot .flight-copy,#mobile-pool-preview .boot .flight-route,#mobile-pool-preview .boot .flight-bottom,#mobile-pool-preview .boot .flight-help{width:100%}}
 @media(prefers-reduced-motion:reduce){.boot-light,.boot-ball{animation:none!important}}
+
+/* Short transitions keep navigation continuous without delaying controls. */
+#mobile-pool-preview .setup-step:not(.hidden),
+#mobile-pool-preview #resultOverlay:not(.hidden) .result-card,
+#mobile-pool-preview #practiceOverlay:not(.hidden)>div,
+#mobile-pool-preview #rulesOverlay:not(.hidden)>div{animation:panel-arrive .2s cubic-bezier(.2,.7,.2,1) both}
+@keyframes panel-arrive{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+#mobile-pool-preview .setup-grid>button{transition:background-color .16s,border-color .16s,transform .16s;touch-action:manipulation}
+#mobile-pool-preview .setup-grid>button:active{transform:scale(.985)}
+#mobile-pool-preview button:focus-visible{outline:2px solid #e7cf99;outline-offset:4px}
+#mobile-pool-preview .setup-step h1:focus{outline:none}
+#mobile-pool-preview .setup-progress span{transition:color .18s,border-color .18s}
+#mobile-pool-preview .setup-grid>button small{line-height:1.5}
+@media(hover:hover){#mobile-pool-preview .setup-grid>button:hover{border-color:#d6bc82;background-color:#24313b}}
+@media(prefers-reduced-motion:reduce){#mobile-pool-preview .setup-step,#mobile-pool-preview .result-card,#mobile-pool-preview #practiceOverlay>div,#mobile-pool-preview #rulesOverlay>div{animation:none!important}#mobile-pool-preview .setup-grid>button,#mobile-pool-preview .setup-progress span{transition:none!important}}
 </style>
   <!-- CRITICAL_STYLE_END -->
 
@@ -351,7 +371,7 @@ html,body{margin:0;background:#040b17;color:#e7f7ff;font-family:system-ui,"PingF
   const retryEngine=()=>{
     if(!engineFailed||tasks.has('game'))return;
     engineFailed=false;status.textContent='正在重新连接比赛引擎';skip.textContent='继续等待';
-    const old=$('gameEngine'),script=document.createElement('script');script.id='gameEngine';script.async=true;script.src='./game.js?v=20261104-no-intro-master-v1&retry='+String(++engineRetry);script.onerror=failEngine;old?.remove();document.body.appendChild(script);
+    const old=$('gameEngine'),script=document.createElement('script');script.id='gameEngine';script.async=true;script.src='./game.js?v=20261105-polish-v1&retry='+String(++engineRetry);script.onerror=failEngine;old?.remove();document.body.appendChild(script);
   };
   window.PoolStartup={ready,engineFailed:failEngine,styleFailed};
   const stylesheet=$('siteStyle');if(stylesheet?.sheet)ready('styles');else if(stylesheet?.dataset?.failed==='true')styleFailed();
@@ -371,9 +391,10 @@ html,body{margin:0;background:#040b17;color:#e7f7ff;font-family:system-ui,"PingF
 
 </script>
   <!-- STARTUP_SCRIPT_END -->
-  <script id="gameEngine" async src="./game.js?v=20261104-no-intro-master-v1" onerror="window.PoolStartup.engineFailed()"></script>
+  <script id="gameEngine" async src="./game.js?v=20261105-polish-v1" onerror="window.PoolStartup.engineFailed()"></script>
   <script async src="./audio.js?v=20261024-original-intro-v5"></script>
   <script async src="./mobile.js?v=20261024-original-intro-v5"></script>
+  <script>if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register((/\/play\/?$/.test(location.pathname)?'../':'./')+'sw.js').catch(()=>{}),{once:true});</script>
 </body>
 </html>
 
