@@ -9,5 +9,7 @@ html=html.replace(/<!-- STARTUP_SCRIPT_START -->[\s\S]*?<!-- STARTUP_SCRIPT_END 
 fs.writeFileSync(path.join(root,'index.html'),html);
 fs.mkdirSync(path.join(root,'play'),{recursive:true});
 for(const name of ['index.html','site.css','startup.js'])fs.copyFileSync(path.join(root,name),path.join(root,'play',name));
+const playIndex=path.join(root,'play','index.html');
+fs.writeFileSync(playIndex,fs.readFileSync(playIndex,'utf8').replaceAll('href="./assets/icons/','href="../assets/icons/').replace('href="./manifest.webmanifest"','href="../manifest.webmanifest"'));
 console.log('Built one stylesheet and inline critical startup.');
 
