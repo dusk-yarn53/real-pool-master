@@ -1,0 +1,10 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
+const source=fs.readFileSync(path.join(__dirname,'../game.js'),'utf8').replace('window.__poolTest={','window.__quality={adaptResolution,getPeriod:()=>refreshPeriod};window.__poolTest={');
+const {window:w}=require('./load-game.cjs')({source});
+const q=w.__quality;
+q.adaptResolution(1,5,0);
+for(let i=0;i<180;i++)q.adaptResolution(1,1000/60,i*17);
+assert(Math.abs(q.getPeriod()-1000/60)<.1,'single short callback must not poison refresh estimate');
+for(let i=0;i<180;i++)q.adaptResolution(1,1000/120,4000+i*9);
+assert(Math.abs(q.getPeriod()-1000/120)<.1,'adapt to a high refresh display');
+console.log('PASS: refresh estimate recovers from jitter and follows 120 Hz');

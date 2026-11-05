@@ -1,6 +1,7 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
 const root=path.join(__dirname,'..'),read=p=>fs.readFileSync(path.join(root,p),'utf8');
-for(const name of ['index.html','startup.js','site.css'])assert.equal(read(name),read('play/'+name),name+' differs between entries');
+for(const name of ['startup.js','site.css'])assert.equal(read(name),read('play/'+name),name+' differs between entries');
+assert.equal(read('index.html'),read('play/index.html').replaceAll('href="../assets/icons/','href="./assets/icons/').replace('href="../manifest.webmanifest"','href="./manifest.webmanifest"'),'play entry differs outside shared app asset paths');
 const html=read('index.html');
 assert(!/<iframe\b/i.test(html),'startup still downloads an embedded animation');
 assert(!/video-intro\.html|startup-video\.mp4|poolintro:done/.test(html),'entry still depends on intro video completion');
