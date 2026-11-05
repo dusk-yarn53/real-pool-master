@@ -62,7 +62,7 @@
   const allGroupGone = g => g && !activeBalls().some(b => group(b.n) === g);
   const lowestNine = () => Math.min(...activeBalls().map(b => b.n));
   const say = text => {state.status=text; $('statusText').textContent=text;};
-  const canAdjustStroke=()=>state.phase==='aim'&&!cuePullActive&&!state.ballInHand&&!(state.opponent==='ai'&&state.turn===1);
+  const canAdjustStroke=()=>state.phase==='aim'&&!cuePullActive&&!state.ballInHand&&$('rulesOverlay').classList.contains('hidden')&&!(state.opponent==='ai'&&state.turn===1);
   const PRACTICE_LAYOUTS={
     pocket:{label:'慢球进中袋',hint:'先试 18% 轻推，再调力度观察袋口；打偏会碰胶边。',balls:[[0,50,12],[1,50,5]],aim:-Math.PI/2,power:18,spinX:0,spinY:0},
     draw:{label:'低杆拉回',hint:'白球正碰目标球后拉回；与高杆使用同一球位和力度。',balls:[[0,40,25],[1,55,25]],aim:0,power:70,spinX:0,spinY:-.85},
@@ -167,6 +167,7 @@
     state.aim=Math.atan2(dy,dx); updateUI(); render();
   }
   function fire(byAI=false,withWindup=false) {
+    if(!byAI&&!$('rulesOverlay').classList.contains('hidden'))return;
     if(state.phase!=='aim'||cuePullActive||state.ballInHand||!$('spinOverlay').classList.contains('hidden')||(state.opponent==='ai'&&state.turn===1&&!byAI))return;
     const c=cue(); if(!c||c.pocketed)return;
 
@@ -2052,7 +2053,8 @@
   }
   let resolutionScale=1,renderCostEMA=0,qualitySamples=0,qualityCooldown=0,refreshPeriod=1000/60;
   function adaptResolution(cost,interval,now){
-    if(interval>4&&interval<25)refreshPeriod=Math.min(refreshPeriod,interval);
+    // Smooth refresh estimates so one early callback cannot permanently lower quality.
+    if(interval>4&&interval<40)refreshPeriod=refreshPeriod*.95+interval*.05;
     renderCostEMA=renderCostEMA?renderCostEMA*.94+cost*.06:cost;
     if(++qualitySamples<45||now<qualityCooldown)return;
     const budget=refreshPeriod*.8;
@@ -2068,7 +2070,8 @@
     if(!cssWidth||!cssHeight)return;
     // A 700 CSS-pixel phone table needs ~2100 actual pixels at DPR 3,
     // not a mandatory 2800-pixel buffer. Large displays may use up to 2.5x.
-    const nativeRatio=clamp(Math.max(cssWidth/VIEW_W,cssHeight/VIEW_H)*deviceScale,1,2.5);
+    const currentDpr=Math.max(1,window.devicePixelRatio||deviceScale);
+    const nativeRatio=clamp(Math.max(cssWidth/VIEW_W,cssHeight/VIEW_H)*currentDpr,1,2.5);
     const ratio=Math.max(.75,nativeRatio*resolutionScale);
     if(Math.abs(ratio-PIXEL_RATIO)<.04)return;
     PIXEL_RATIO=ratio;canvas.width=Math.round(VIEW_W*ratio);canvas.height=Math.round(VIEW_H*ratio);
@@ -2317,7 +2320,12 @@
     // Keep the frozen line through the launch render; moving balls hide it.
     if(shoot){fire(false,true);heldGuide=null;}else{heldGuide=null;state.power=startingPower;syncPowerUI();updateUI();render();}
   });
-  meter.addEventListener('pointercancel',()=>{if(meterDrag)state.power=meterDrag.startingPower;clearCuePull();syncPowerUI();updateUI();render();});
+  function cancelMeterDrag(e){
+    if(!meterDrag||(e?.pointerId!==undefined&&e.pointerId!==meterDrag.id))return;
+    state.power=meterDrag.startingPower;clearCuePull();syncPowerUI();updateUI();render();
+  }
+  meter.addEventListener('pointercancel',cancelMeterDrag);
+  meter.addEventListener('lostpointercapture',cancelMeterDrag);
   meter.addEventListener('keydown',e=>{
     if(!canAdjustStroke())return;
     if(e.key==='ArrowDown'||e.key==='ArrowUp'){
@@ -2344,7 +2352,12 @@
   });
   const stopAngleDrag=()=>{angleDrag=null;angleRuler.classList.remove('dragging');requestAimFrame();};
   angleRuler.addEventListener('pointerup',e=>{if(angleDrag&&angleDrag.id===e.pointerId){if(canAdjustStroke())state.aim=angleDrag.aim+(rulerAxis(e)-angleDrag.start)*angleDrag.gain*Math.PI/180;stopAngleDrag();updateUI();render();}});
-  angleRuler.addEventListener('pointercancel',stopAngleDrag);
+  function cancelAngleDrag(e){
+    if(!angleDrag||(e?.pointerId!==undefined&&angleDrag.id!==e.pointerId))return;
+    state.aim=angleDrag.aim;stopAngleDrag();updateUI();render();
+  }
+  angleRuler.addEventListener('pointercancel',cancelAngleDrag);
+  angleRuler.addEventListener('lostpointercapture',cancelAngleDrag);
   angleRuler.addEventListener('keydown',e=>{
     if(!canAdjustStroke()||e.key!=='ArrowLeft'&&e.key!=='ArrowRight')return;
     e.preventDefault();const step=e.shiftKey?.0001:.001;state.aim+=(e.key==='ArrowLeft'?-1:1)*step*Math.PI/180;updateUI();render();
@@ -2354,6 +2367,8 @@
     const ids={mode:'setupMode',rules:'setupRules',difficulty:'setupDifficulty'};
     for(const [name,id] of Object.entries(ids))$(id).classList.toggle('hidden',name!==step);
     document.querySelectorAll('[data-progress]').forEach(label=>label.classList.toggle('active',label.dataset.progress===step));
+    const heading=$(ids[step])?.querySelector('h1');
+    heading?.setAttribute('tabindex','-1');heading?.focus?.({preventScroll:true});
   }
   function openSetup(step='mode'){
     window.PoolAudio?.stopGameMusic?.();
@@ -2424,10 +2439,11 @@
     if(e.key==='Escape'){$('rulesOverlay').classList.add('hidden');return;}
     if(state.phase!=='aim')return;
     if(e.key==='ArrowLeft'||e.key==='ArrowRight'){if(e.target===angleRuler||!canAdjustStroke())return;e.preventDefault();const step=e.shiftKey?.0001:.001;state.aim+=(e.key==='ArrowLeft'?-1:1)*step*Math.PI/180;updateUI();render();}
-    if(e.key===' '){e.preventDefault();fire(false,true);}
+    if(e.key===' '){if(e.repeat||e.target?.closest?.('button,input,select,textarea,[contenteditable="true"]'))return;e.preventDefault();fire(false,true);}
   });
   let last=performance.now(),acc=0,manualTime=false;
   function frame(now){
+    if(document.hidden){last=now;acc=0;requestAnimationFrame(frame);return;}
     const frameStarted=performance.now(),interval=now-last;
     const elapsed=Math.max(0,Math.min(.05,interval/1000));last=now;
     const active=state.phase==='moving'||state.pocketAnimations.length>0||!!state.stroke;

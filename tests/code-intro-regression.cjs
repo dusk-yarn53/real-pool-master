@@ -1,6 +1,6 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
 const root=path.join(__dirname,'..'),read=p=>fs.readFileSync(path.join(root,p),'utf8');
-for(const name of ['index.html','startup.js','site.css'])assert.equal(read(name),read('play/'+name),name+' differs between entries');
+for(const name of ['index.html','startup.js','site.css','manifest.webmanifest'])assert.equal(read(name),read('play/'+name),name+' differs between entries');
 const html=read('index.html');
 assert(!/<iframe\b/i.test(html),'startup still downloads an embedded animation');
 assert(!/video-intro\.html|startup-video\.mp4|poolintro:done/.test(html),'entry still depends on intro video completion');
