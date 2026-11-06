@@ -15,8 +15,8 @@
   <meta name="apple-mobile-web-app-title" content="光域台球">
   <link rel="preload" href="./assets/fuguang-arena.jpg" as="image">
   <title>光域台球 · 浮光竞技馆</title>
-  <link rel="preload" href="./site.css?v=20261105-polish-v1" as="style">
-<link id="siteStyle" rel="stylesheet" href="./site.css?v=20261105-polish-v1" media="print" onload="this.media='all';window.PoolStartup?.ready('styles')" onerror="this.dataset.failed='true';window.PoolStartup?.styleFailed()">
+  <link rel="preload" href="./site.css?v=20261106-ios-quality-v1" as="style">
+<link id="siteStyle" rel="stylesheet" href="./site.css?v=20261106-ios-quality-v1" media="print" onload="this.media='all';window.PoolStartup?.ready('styles')" onerror="this.dataset.failed='true';window.PoolStartup?.styleFailed()">
   <!-- CRITICAL_STYLE_START -->
   <style>/* Always show a landscape game; no orientation gate or blocked controls. */
 #mobile-pool-preview.phone-landscape{position:relative!important;width:100%!important;height:var(--phone-height)!important;min-height:0!important;overflow:hidden!important;padding:0!important}
@@ -371,7 +371,7 @@ html,body{margin:0;background:#040b17;color:#e7f7ff;font-family:system-ui,"PingF
   const retryEngine=()=>{
     if(!engineFailed||tasks.has('game'))return;
     engineFailed=false;status.textContent='正在重新连接比赛引擎';skip.textContent='继续等待';
-    const old=$('gameEngine'),script=document.createElement('script');script.id='gameEngine';script.async=true;script.src='./game.js?v=20261105-polish-v1&retry='+String(++engineRetry);script.onerror=failEngine;old?.remove();document.body.appendChild(script);
+    const old=$('gameEngine'),script=document.createElement('script');script.id='gameEngine';script.async=true;script.src='./game.js?v=20261106-ios-quality-v1&retry='+String(++engineRetry);script.onerror=failEngine;old?.remove();document.body.appendChild(script);
   };
   window.PoolStartup={ready,engineFailed:failEngine,styleFailed};
   const stylesheet=$('siteStyle');if(stylesheet?.sheet)ready('styles');else if(stylesheet?.dataset?.failed==='true')styleFailed();
@@ -391,7 +391,7 @@ html,body{margin:0;background:#040b17;color:#e7f7ff;font-family:system-ui,"PingF
 
 </script>
   <!-- STARTUP_SCRIPT_END -->
-  <script id="gameEngine" async src="./game.js?v=20261105-polish-v1" onerror="window.PoolStartup.engineFailed()"></script>
+  <script id="gameEngine" async src="./game.js?v=20261106-ios-quality-v1" onerror="window.PoolStartup.engineFailed()"></script>
   <script async src="./audio.js?v=20261024-original-intro-v5"></script>
   <script async src="./mobile.js?v=20261024-original-intro-v5"></script>
   <script>if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register((/\/play\/?$/.test(location.pathname)?'../':'./')+'sw.js').catch(()=>{}),{once:true});</script>
