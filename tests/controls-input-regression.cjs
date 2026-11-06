@@ -25,6 +25,11 @@ for(const rotated of [false,true]){
  // Once a stroke finishes/restarts, the frozen trial cannot leak into a new aim.
  t.setGuideBalls([{n:0,x:30,y:25},{n:1,x:52,y:25}],0,22);assert.equal(t.getDisplayGuide().power,22);
 }
+// Pin the raster test font instead of depending on runner font fallback.
+if(process.platform==='linux'){
+ const {GlobalFonts}=require('@napi-rs/canvas');
+ assert(GlobalFonts.registerFromPath('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf','Arial'),'raster fixture font missing');
+}
 const raster=load({source:source.replace('window.__poolTest={','window.__poolTest={badge(n){return numberBadgePixels(n)},'),raster:true,mobile:true});
 for(let n=1;n<=8;n++){
  const badge=raster.window.__poolTest.badge(n);let white=0;
@@ -34,3 +39,4 @@ for(let n=1;n<=8;n++){
 }
 assert(!fs.readFileSync(require('node:path').join(__dirname,'../index.html'),'utf8').includes('data-aim-feel'));
 console.log(JSON.stringify({passed:true,lockedSamples,rotatedTouch:true,secondPointerIsolated:true,cancelAndShortPullRestore:true,powerStillControlsShot:true,whiteNumerals:8}));
+
