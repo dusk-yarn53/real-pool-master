@@ -1,6 +1,6 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
-const source=fs.readFileSync(path.join(__dirname,'../game.js'),'utf8').replace('window.__poolTest={','window.__quality={adaptResolution,getPeriod:()=>refreshPeriod};window.__poolTest={');
-const {window:w}=require('./load-game.cjs')({source});
+const source=fs.readFileSync(path.join(__dirname,'../game.js'),'utf8').replace('window.__poolTest={','window.__quality={adaptResolution,restoreIdleQuality,resizeRenderBuffer,resumeRendering,getPeriod:()=>refreshPeriod};window.__poolTest={');
+const {window:w,canvas}=require('./load-game.cjs')({source,dpr:3,mobile:true});
 const q=w.__quality;
 q.adaptResolution(1,5,0);
 for(let i=0;i<180;i++)q.adaptResolution(1,1000/60,i*17);
@@ -8,3 +8,18 @@ assert(Math.abs(q.getPeriod()-1000/60)<.1,'single short callback must not poison
 for(let i=0;i<180;i++)q.adaptResolution(1,1000/120,4000+i*9);
 assert(Math.abs(q.getPeriod()-1000/120)<.1,'adapt to a high refresh display');
 console.log('PASS: refresh estimate recovers from jitter and follows 120 Hz');
+for(let i=0;i<180;i++)q.adaptResolution(30,16.67,10000+i*50);
+assert(w.__poolTest.getRenderInfo().resolutionScale<1,'fixture must lower resolution under sustained load');
+q.restoreIdleQuality();
+assert.equal(w.__poolTest.getRenderInfo().resolutionScale,1,'stationary table must recover full detail');
+canvas.getBoundingClientRect=()=>({width:800,height:300});
+q.resizeRenderBuffer();
+assert(Math.abs(w.__poolTest.getRenderInfo().ratio-300/790*3)<.001,'letterbox width must not inflate pixel buffer');
+const width=canvas.width;
+q.resizeRenderBuffer();assert.equal(canvas.width,width,'unchanged layout keeps its buffer');
+w.__poolTest.setMovingBalls([{n:0,x:30,y:25,vx:20,vy:0}]);
+for(let i=0;i<100;i++)q.adaptResolution(30,16.67,30000+i*50);
+const movingScale=w.__poolTest.getRenderInfo().resolutionScale;
+q.restoreIdleQuality();assert.equal(w.__poolTest.getRenderInfo().resolutionScale,movingScale,'no quality reset during a shot');
+q.resumeRendering();assert.equal(w.__poolTest.getRenderInfo().renderCostEMA,0,'resume discards stale timing samples');
+console.log('PASS: idle clarity, moving-shot stability, contained resolution and resume timing');

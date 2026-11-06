@@ -2052,6 +2052,12 @@
     if(models.length)textureCursor=(textureCursor+textureBudget)%models.length;
   }
   let resolutionScale=1,renderCostEMA=0,qualitySamples=0,qualityCooldown=0,refreshPeriod=1000/60;
+  function restoreIdleQuality(){
+    if(state.phase==='moving'||state.pocketAnimations.length||state.stroke)return;
+    renderCostEMA=0;qualitySamples=0;
+    if(resolutionScale===1)return;
+    resolutionScale=1;resizeRenderBuffer();
+  }
   function adaptResolution(cost,interval,now){
     // Smooth refresh estimates so one early callback cannot permanently lower quality.
     if(interval>4&&interval<40)refreshPeriod=refreshPeriod*.95+interval*.05;
@@ -2071,7 +2077,9 @@
     // A 700 CSS-pixel phone table needs ~2100 actual pixels at DPR 3,
     // not a mandatory 2800-pixel buffer. Large displays may use up to 2.5x.
     const currentDpr=Math.max(1,window.devicePixelRatio||deviceScale);
-    const nativeRatio=clamp(Math.max(cssWidth/VIEW_W,cssHeight/VIEW_H)*currentDpr,1,2.5);
+    // object-fit:contain can letterbox inside a wide canvas element. Size the
+    // buffer for the displayed table, not the unused letterbox width.
+    const nativeRatio=clamp(Math.min(cssWidth/VIEW_W,cssHeight/VIEW_H)*currentDpr,1,2.5);
     const ratio=Math.max(.75,nativeRatio*resolutionScale);
     if(Math.abs(ratio-PIXEL_RATIO)<.04)return;
     PIXEL_RATIO=ratio;canvas.width=Math.round(VIEW_W*ratio);canvas.height=Math.round(VIEW_H*ratio);
@@ -2453,10 +2461,17 @@
     if(active){const started=performance.now();render(manualTime?1:acc/STEP);const paintTime=performance.now()-started;
       if(paintTime>10)textureBudget=Math.max(1,textureBudget-1);
       else if(paintTime<4)textureBudget=Math.min(MOBILE_RENDER?4:8,textureBudget+1);
-      if(!manualTime)adaptResolution(performance.now()-frameStarted,interval,now);
-    }requestAnimationFrame(frame);
+      if(!manualTime)adaptResolution(paintTime,interval,now);
+    }else restoreIdleQuality();
+    requestAnimationFrame(frame);
   }
-  document.addEventListener('visibilitychange',()=>{last=performance.now();acc=0;previousPhysics.clear();previousPaint=null;});
+  function resumeRendering(){
+    last=performance.now();acc=0;previousPhysics.clear();previousPaint=null;
+    renderCostEMA=0;qualitySamples=0;qualityCooldown=last+1500;
+    if(!document.hidden)requestAnimationFrame(()=>{restoreIdleQuality();resizeRenderBuffer();render();});
+  }
+  document.addEventListener('visibilitychange',resumeRendering);
+  window.addEventListener?.('pageshow',resumeRendering);
   window.addEventListener?.('resize',()=>requestAnimationFrame(resizeRenderBuffer));
   if(window.ResizeObserver)new window.ResizeObserver(()=>requestAnimationFrame(resizeRenderBuffer)).observe(canvas);
   requestAnimationFrame(resizeRenderBuffer);
