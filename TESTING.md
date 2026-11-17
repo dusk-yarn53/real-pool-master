@@ -38,3 +38,25 @@ node tests/preview-clock-regression.cjs /workspace/pool-master-tactics-preview.h
 ### 独立异步启动与火箭加载
 
 运行 `node scripts/build-entry.cjs`，再运行 `node tests/entry-loading-regression.cjs`。覆盖：音乐或背景请求挂起不阻塞入场、样式比引擎晚到、下载失败仅重试一次进行中的请求、重试不刷新整页、进度与火箭位置同步、网络慢时继续等待。`node tests/landscape-regression.cjs` 同时校验 HTML 中的横屏适配与源文件一致。
+
+## 2026-11-17 测试现状
+
+真机验收步骤见 [iPhone 验收清单](ACCEPTANCE-20261117.md)，面板用 `?diag=1` 打开。
+
+**CI（`.github/workflows/game-regression.yml`，Node 22）实际运行：** `native-drag-cluster`、`aim-direction`、`aim-scheduling`、`aim-visible`、`guide-refinement-cushion`、`aim-quality`、`controls-input`、`spin-editor`、`refresh-quality`、`master-offence-20261020`、`master-realism`、`ai-close-position`、`near-multirail`、`guide-physics`、`deployment-compat`、`entry-loading`，外加 `cmp game.js play/game.js` 等文件同步检查和 `node --check`。
+
+**本地额外通过：** `aim-continuity`、`aim-pull-latency`、`aim-drag-cost`、`pocket-entry-continuity`、`pocket-fall`、`pocket-occlusion`、`pocket-rim`、`code-intro`、`landscape`、`audio`、`audio-unlock-race`、`recorded-audio`、`navigation-result`、`eight-break`、`english-fall`、`guide-alignment`、`guide-cluster`、`high-speed-physics`、`input-isolation`、`intro-autoplay`、`master-accuracy-20261019`、`master-position` 等。
+
+**已知基线遗留、当前会失败的脚本（均不在 CI 中）：**
+
+| 脚本 | 失败断言 | 判断 |
+| --- | --- | --- |
+| `adaptive-contact-regression.cjs` | long swipe still too slow | 断言的是旧的加速拖拽模型，现行实现已改常数增益 |
+| `orbit-input-regression.cjs` | last lift movement lost | 旧抬起补点逻辑，现行 pointerup 会补最后一帧 |
+| `realism-quality-regression.cjs` | fall painted cloth/rail | 掩码按旧袋口弧线计算，当前球在袋口内的绘制范围更大；人工比对帧未发现画到台面 |
+| `smooth-render-regression.cjs` | 布尔断言 | 检查旧的全帧平滑渲染管线，现行改为区域重绘 |
+| `review-export-regression.cjs` | ENOENT fuguang-orbit-review.html | 需要先跑 `scripts/build-review.cjs` 生成审阅稿，不是玩法回归 |
+| `straight-guide-regression.cjs` | MODULE_NOT_FOUND playwright | 需要 Playwright 与 Chromium，本机未装；CI 不跑浏览器用例 |
+
+它们没有加入 CI 是有原因的：后续袋口与渲染由 `pocket-*`、`refresh-quality` 等新用例覆盖。改这些脚本前应先确认要恢复的是旧行为还是更新断言，不要为了让它们变绿而改动现行渲染。
+

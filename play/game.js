@@ -1279,8 +1279,9 @@
   async function queueAI() {
     if(state.opponent!=='ai'||state.turn!==1||state.phase!=='aim')return;
     const ticket=++state.aiTicket,isCurrent=()=>ticket===state.aiTicket&&state.opponent==='ai'&&state.turn===1&&state.phase==='aim';
-    state.aiThinking=true;state.aiPlan=null;say('电脑正在判断球路…');render();
+    state.aiThinking=true;state.aiPlan=null;diag.aiStartAt=performance.now();say('电脑正在判断球路…');render();
     const plan=await chooseAIPlan(isCurrent);
+    if(diag.on&&diag.aiStartAt){diag.aiMs=performance.now()-diag.aiStartAt;diag.aiStartAt=0;}
     if(!isCurrent()||!plan)return;
     presentAIPlan(plan,isCurrent);
   }
@@ -2222,7 +2223,7 @@
         // Constant gain keeps reversals and long sweeps predictable; the ruler
         // remains available for very fine adjustments.
         const degrees=distance*aimGain;
-        state.aim=drag.startAim+degrees*Math.PI/180;requestAimFrame();}
+        state.aim=drag.startAim+degrees*Math.PI/180;markInput();requestAimFrame();}
     }
   }
   canvas.addEventListener('pointermove',updateAimPointer);
@@ -2309,7 +2310,7 @@
     state.power=Math.round(5+95*Math.pow(progress,1.15));
     const track=meter.querySelector('.cue-track');
     meter.style.setProperty('--cue-pull',`${Math.round(progress*track.clientHeight*.2)}px`);
-    syncPowerUI();requestAimFrame();
+    markInput();syncPowerUI();requestAimFrame();
   }
   meter.addEventListener('pointerdown',e=>{
     if(!canAdjustStroke()||state.drag||angleDrag||meterDrag)return;
@@ -2356,6 +2357,7 @@
   angleRuler.addEventListener('pointermove',e=>{
     if(!angleDrag||angleDrag.id!==e.pointerId||!canAdjustStroke())return;
     state.aim=angleDrag.aim+(rulerAxis(e)-angleDrag.start)*angleDrag.gain*Math.PI/180;
+    markInput();
     requestAimFrame();
   });
   const stopAngleDrag=()=>{angleDrag=null;angleRuler.classList.remove('dragging');requestAimFrame();};
@@ -2449,6 +2451,69 @@
     if(e.key==='ArrowLeft'||e.key==='ArrowRight'){if(e.target===angleRuler||!canAdjustStroke())return;e.preventDefault();const step=e.shiftKey?.0001:.001;state.aim+=(e.key==='ArrowLeft'?-1:1)*step*Math.PI/180;updateUI();render();}
     if(e.key===' '){if(e.repeat||e.target?.closest?.('button,input,select,textarea,[contenteditable="true"]'))return;e.preventDefault();fire(false,true);}
   });
+  // Optional field diagnostics, opened with ?diag=1. It only reads numbers the
+  // engine already measures, so a real phone can report frame and input costs
+  // without remote developer tools and without changing gameplay.
+  const diag={on:false,frames:[],paints:[],long:0,worst:0,inputAt:0,latency:null,aiStartAt:0,aiMs:null,root:null,body:null,tools:null,updated:0};
+  function markInput(){if(diag.on)diag.inputAt=performance.now();}
+  function diagReset(){diag.frames.length=0;diag.paints.length=0;diag.long=0;diag.worst=0;diag.latency=null;diag.inputAt=0;diag.updated=0;}
+  function diagSample(interval,paintTime){
+    if(!diag.on)return;
+    diag.frames.push(interval);if(diag.frames.length>150)diag.frames.shift();
+    if(paintTime>=0){
+      diag.paints.push(paintTime);if(diag.paints.length>150)diag.paints.shift();
+      if(paintTime>diag.worst)diag.worst=paintTime;
+    }
+    if(interval>33.4)diag.long++;
+    if(diag.inputAt){diag.latency=performance.now()-diag.inputAt;diag.inputAt=0;}
+  }
+  function diagSummary(){
+    const frames=diag.frames,interval=frames.length?frames.reduce((a,b)=>a+b,0)/frames.length:0;
+    const paints=diag.paints,paint=paints.length?paints.reduce((a,b)=>a+b,0)/paints.length:0;
+    const sorted=paints.slice().sort((a,b)=>a-b);
+    return {fps:interval?1000/interval:0,interval,paint,p95:sorted.length?sorted[Math.min(sorted.length-1,Math.floor(sorted.length*.95))]:0,
+      worst:diag.worst,long:diag.long,latency:diag.latency,aiMs:diag.aiMs,canvas:[canvas.width,canvas.height],dpr:devicePixelRatio,ratio:PIXEL_RATIO,
+      phase:state.phase,balls:state.balls.filter(b=>!b.pocketed).length,power:Math.round(state.power),aim:state.aim*180/Math.PI};
+  }
+  function diagPaint(){
+    if(!diag.on||!diag.body)return;
+    const s=diagSummary(),f=(v,n=1)=>v==null?'—':Number(v).toFixed(n);
+    const phaseNames={menu:'选局',aim:'瞄准',moving:'走球',result:'结算'};
+    diag.body.innerHTML=[
+      `帧率 ${f(s.fps)} FPS · 间隔 ${f(s.interval)} ms`,
+      `绘制 ${f(s.paint)} ms · p95 ${f(s.p95)} ms · 峰值 ${f(s.worst)} ms`,
+      `长帧 ${s.long} 次 >33 ms`,
+      `画布 ${s.canvas[0]}×${s.canvas[1]} · DPR ${f(s.dpr,2)} · 比例 ${f(s.ratio,2)}`,
+      `拖拽延迟 ${f(s.latency)} ms · 电脑思考 ${s.aiMs==null?'—':f(s.aiMs,0)+' ms'}`,
+      `状态 ${phaseNames[s.phase]||s.phase} · 球 ${s.balls} · 力度 ${s.power}% · 角度 ${f(s.aim,2)}°`
+    ].join('<br>');
+  }
+  function initDiagnostics(){
+    if(!/[?&]diag=1/.test(location.search||''))return;
+    try{
+      const root=document.createElement('div'),body=document.createElement('div'),tools=document.createElement('div');
+      Object.assign(root.style,{position:'fixed',left:'8px',bottom:'8px',zIndex:'9999',padding:'8px 10px',borderRadius:'10px',
+        background:'#04121ce8',color:'#bff3ff',font:'11px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace',pointerEvents:'none',
+        maxWidth:'min(92vw,380px)',boxShadow:'0 8px 30px #0008',border:'1px solid #2b6b8566'});
+      Object.assign(tools.style,{display:'flex',gap:'6px',marginTop:'6px',pointerEvents:'auto'});
+      const button=(label,handler)=>{const b=document.createElement('button');b.type='button';b.textContent=label;
+        Object.assign(b.style,{font:'11px/1.2 inherit',padding:'3px 8px',borderRadius:'7px',border:'1px solid #3f8ba3aa',background:'#0d2a3a',color:'#cdefff'});
+        b.addEventListener('click',handler);return b;};
+      const copyText=async()=>{const s=diagSummary();const line=[`光域台球诊断 ${new Date().toISOString()}`,
+        `UA ${navigator.userAgent}`,`FPS ${s.fps.toFixed(1)} 间隔 ${s.interval.toFixed(1)}ms`,
+        `绘制 平均 ${s.paint.toFixed(1)}ms p95 ${s.p95.toFixed(1)}ms 峰值 ${s.worst.toFixed(1)}ms`,
+        `长帧 ${s.long} 画布 ${s.canvas[0]}x${s.canvas[1]} DPR ${s.dpr} 比例 ${s.ratio.toFixed(2)}`,
+        `拖拽延迟 ${s.latency==null?'—':s.latency.toFixed(1)+'ms'} 电脑思考 ${s.aiMs==null?'—':s.aiMs.toFixed(0)+'ms'}`].join('\n');
+        try{await navigator.clipboard.writeText(line);}catch(e){console.log(line);}return line;};
+      const copy=button('复制',()=>copyText().then(()=>{copy.textContent='已复制';setTimeout(()=>copy.textContent='复制',900);}));
+      tools.append(button('清零',()=>{diagReset();diagPaint();}),copy,button('关闭',()=>{diag.on=false;root.remove();}));
+      root.append(body,tools);document.body.append(root);
+      diag.on=true;diag.root=root;diag.body=body;diag.tools=tools;
+      window.__poolDiag={summary:diagSummary,reset:diagReset,copy:copyText};
+      diagPaint();
+    }catch(e){diag.on=false;}
+  }
+
   let last=performance.now(),acc=0,manualTime=false;
   function frame(now){
     if(document.hidden){last=now;acc=0;requestAnimationFrame(frame);return;}
@@ -2462,7 +2527,9 @@
       if(paintTime>10)textureBudget=Math.max(1,textureBudget-1);
       else if(paintTime<4)textureBudget=Math.min(MOBILE_RENDER?4:8,textureBudget+1);
       if(!manualTime)adaptResolution(paintTime,interval,now);
-    }else restoreIdleQuality();
+      diagSample(interval,paintTime);
+    }else{restoreIdleQuality();diagSample(interval,-1);}
+    if(diag.on&&now-(diag.updated||0)>250){diag.updated=now;diagPaint();}
     requestAnimationFrame(frame);
   }
   function resumeRendering(){
@@ -2527,6 +2594,6 @@
     state.spinX=0;state.spinY=-.85;$('player2Name').textContent='玩家 2';syncPowerUI();moveSpinDot();$('menuOverlay').classList.add('hidden');updateUI();render();
   }};}
   cueTexture=buildCueTexture();
-  syncPowerUI();render();requestAnimationFrame(frame);window.PoolStartup?.ready('game');
+  syncPowerUI();render();initDiagnostics();requestAnimationFrame(frame);window.PoolStartup?.ready('game');
 })();
 
