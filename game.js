@@ -2472,7 +2472,7 @@
     const paints=diag.paints,paint=paints.length?paints.reduce((a,b)=>a+b,0)/paints.length:0;
     const sorted=paints.slice().sort((a,b)=>a-b);
     return {fps:interval?1000/interval:0,interval,paint,p95:sorted.length?sorted[Math.min(sorted.length-1,Math.floor(sorted.length*.95))]:0,
-      worst:diag.worst,long:diag.long,latency:diag.latency,aiMs:diag.aiMs,canvas:[canvas.width,canvas.height],dpr:devicePixelRatio,ratio:PIXEL_RATIO,
+      worst:diag.worst,long:diag.long,samples:frames.length,latency:diag.latency,aiMs:diag.aiMs,canvas:[canvas.width,canvas.height],dpr:devicePixelRatio,ratio:PIXEL_RATIO,
       phase:state.phase,balls:state.balls.filter(b=>!b.pocketed).length,power:Math.round(state.power),aim:state.aim*180/Math.PI};
   }
   function diagPaint(){
@@ -2512,6 +2512,98 @@
       window.__poolDiag={summary:diagSummary,reset:diagReset,copy:copyText};
       diagPaint();
     }catch(e){diag.on=false;}
+  }
+
+  // ?bench=1 — one tap runs three real strokes and reports device frame data.
+  // It starts a fresh local match, so the report is repeatable on any phone and
+  // does not depend on the owner reading numbers off the diagnostics panel.
+  const bench={on:false,busy:false,root:null,body:null,report:null,status:null,copy:null,url:null};
+  const benchWait=ms=>new Promise(r=>setTimeout(r,ms));
+  const benchSettled=()=>state.phase!=='moving'&&!state.stroke&&state.pocketAnimations.length===0;
+  function benchPlaceCue(){
+    if(!state.ballInHand)return true;
+    for(let y=R+.6;y<H-R;y+=1.5)for(let x=R+.6;x<=HEAD_LINE;x+=1.5){
+      if(validCuePosition(x,y)){placeCue(x,y,true);return true;}
+    }
+    return false;
+  }
+  async function benchShoot(aim,power){
+    benchPlaceCue();
+    state.aim=aim;state.power=power;state.spinX=0;state.spinY=0;
+    updateUI();moveSpinDot();render();
+    diagReset();diag.on=true;
+    fire(false,false);
+    const started=performance.now();
+    while(!benchSettled()&&performance.now()-started<12000)await benchWait(60);
+    await benchWait(120);
+    const s=diagSummary();
+    return {fps:s.fps,paint:s.paint,p95:s.p95,worst:s.worst,long:s.long,samples:s.samples,settle:performance.now()-started};
+  }
+  function benchText(){
+    const r=bench.report;if(!r)return '';
+    const f=(v,n=1)=>v==null?'—':Number(v).toFixed(n);
+    return [`光域台球 · 真机体检 ${new Date().toLocaleString()}`,
+      `UA ${navigator.userAgent}`,
+      `空闲 ${f(r.idle.fps)} FPS · 画布 ${r.canvas[0]}x${r.canvas[1]} · DPR ${f(r.dpr,2)} · 比例 ${f(r.ratio,2)}`,
+      ...r.shots.map((s,i)=>`第 ${i+1} 杆 力度 ${s.power}%：${f(s.fps)} FPS · 绘制 ${f(s.paint)}ms · p95 ${f(s.p95)}ms · 长帧 ${s.long}（近 ${s.samples} 帧）· 停球 ${f(s.settle,0)}ms`),
+      `稳定性：最低 ${f(r.minFps)} FPS，掉帧率 ${f(r.dropRate,1)}%`].join('\n');
+  }
+  function benchStatus(text){if(bench.status)bench.status.textContent=text;}
+  async function benchRun(){
+    if(bench.busy)return;bench.busy=true;bench.report=null;
+    if(bench.copy)bench.copy.textContent='复制报告';
+    try{
+      state.opponent='local';
+      benchStatus('准备球台…');
+      init('eight');
+      diagReset();diag.on=true;
+      await benchWait(1200);
+      const idle=diagSummary();
+      const shots=[];
+      const plan=[{aim:state.aim,power:88,label:'开球'},{aim:.35,power:68,label:'中力'},{aim:-.6,power:52,label:'轻推'}];
+      for(let i=0;i<plan.length;i++){
+        benchStatus(`第 ${i+1}/${plan.length} 杆：${plan[i].label}`);
+        const s=await benchShoot(plan[i].aim,plan[i].power);
+        shots.push({...s,power:plan[i].power});
+      }
+      const fpsList=shots.map(s=>s.fps).filter(v=>v>0);
+      const minFps=fpsList.length?Math.min(...fpsList):0;
+      const rates=shots.filter(s=>s.samples>0).map(s=>s.long/s.samples);
+      const dropRate=rates.length?rates.reduce((a,b)=>a+b,0)/rates.length*100:0;
+      bench.report={idle,shots,canvas:[canvas.width,canvas.height],dpr:devicePixelRatio,ratio:PIXEL_RATIO,minFps,dropRate};
+      benchStatus('完成，结果如下');
+      if(bench.body){
+        bench.body.textContent='';
+        for(const line of benchText().split('\n')){const p=document.createElement('div');p.textContent=line;bench.body.append(p);}
+      }
+    }catch(e){
+      benchStatus('体检中断：'+(e&&e.message?e.message:'未知错误'));
+    }finally{bench.busy=false;}
+  }
+  function initBenchmark(){
+    if(!/[?&]bench=1/.test(location.search||''))return;
+    try{
+      const root=document.createElement('div'),title=document.createElement('div'),body=document.createElement('div'),tools=document.createElement('div');
+      Object.assign(root.style,{position:'fixed',right:'10px',bottom:'10px',zIndex:'9999',width:'min(92vw,380px)',padding:'10px 12px',
+        borderRadius:'12px',background:'#04121cee',color:'#d6f4ff',font:'12px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace',
+        boxShadow:'0 10px 36px #000a',border:'1px solid #2b6b85aa'});
+      Object.assign(title.style,{fontWeight:'700',letterSpacing:'.5px',marginBottom:'4px'});
+      title.textContent='真机体检';
+      bench.status=document.createElement('div');
+      bench.status.style.cssText='color:#8fd8ef;margin-bottom:6px';
+      bench.status.textContent='点开始跑三杆；会重置当前对局，用新开的一局测。';
+      bench.body=body;
+      Object.assign(tools.style,{display:'flex',gap:'6px',marginTop:'8px'});
+      const button=(label,handler)=>{const b=document.createElement('button');b.type='button';b.textContent=label;
+        Object.assign(b.style,{font:'12px/1.2 inherit',padding:'5px 10px',borderRadius:'8px',border:'1px solid #3f8ba3aa',background:'#0d2a3a',color:'#cdefff'});
+        b.addEventListener('click',handler);return b;};
+      bench.copy=button('复制报告',async()=>{const text=benchText();if(!text)return;
+        try{await navigator.clipboard.writeText(text);}catch(e){console.log(text);}
+        bench.copy.textContent='已复制';setTimeout(()=>bench.copy.textContent='复制报告',900);});
+      tools.append(button('开始体检',()=>benchRun()),bench.copy,button('关闭',()=>{bench.on=false;root.remove();}));
+      root.append(title,bench.status,body,tools);document.body.append(root);
+      bench.on=true;bench.root=root;
+    }catch(e){bench.on=false;}
   }
 
   let last=performance.now(),acc=0,manualTime=false;
@@ -2594,6 +2686,6 @@
     state.spinX=0;state.spinY=-.85;$('player2Name').textContent='玩家 2';syncPowerUI();moveSpinDot();$('menuOverlay').classList.add('hidden');updateUI();render();
   }};}
   cueTexture=buildCueTexture();
-  syncPowerUI();render();initDiagnostics();requestAnimationFrame(frame);window.PoolStartup?.ready('game');
+  syncPowerUI();render();initDiagnostics();initBenchmark();requestAnimationFrame(frame);window.PoolStartup?.ready('game');
 })();
 
