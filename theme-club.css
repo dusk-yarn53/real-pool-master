@@ -18,6 +18,8 @@
 }
 
 /* 顶栏 */
+#mobile-pool-preview .app{background:radial-gradient(circle at 50% 44%,#1a130e 0,#0d0a08 62%,#080706 100%)}
+#mobile-pool-preview .mobile-game-surface{background:#0b0908}
 #mobile-pool-preview .topbar{
   border-bottom:1px solid var(--brass-soft);
   background:linear-gradient(180deg,#14100c,#0d0a08);
