@@ -420,11 +420,18 @@
     if(sideSpeed>.0001){const drag=Math.min(sideSpeed,12*Math.min(1,sideSpeed/1.5)*dt);b.spin-=Math.sign(b.spin)*drag;}
   }
   function advanceBallOrientation(b,dt){
-    const wx=-b.rollVy/R,wy=b.rollVx/R,wz=b.spin/R,rate=Math.hypot(wx,wy,wz);
+    const wx=-b.rollVy/R,wy=b.rollVx/R,wz=b.spin/R,rate=Math.sqrt(wx*wx+wy*wy+wz*wz);
     if(rate<.015)return;
-    const half=rate*dt*.5,s=Math.sin(half)/rate,dq=[wx*s,wy*s,wz*s,Math.cos(half)],q=b.q;
-    const next=[dq[3]*q[0]+dq[0]*q[3]+dq[1]*q[2]-dq[2]*q[1],dq[3]*q[1]-dq[0]*q[2]+dq[1]*q[3]+dq[2]*q[0],dq[3]*q[2]+dq[0]*q[1]-dq[1]*q[0]+dq[2]*q[3],dq[3]*q[3]-dq[0]*q[0]-dq[1]*q[1]-dq[2]*q[2]];
-    const magnitude=Math.hypot(...next);b.q=next.map(v=>v/magnitude);
+    // Integrate in place: a ball rotates up to 16 times per frame, and the
+    // previous version allocated three arrays every call.
+    const half=rate*dt*.5,s=Math.sin(half)/rate,cos=Math.cos(half),q=b.q;
+    const x0=wx*s,y0=wy*s,z0=wz*s,q0=q[0],q1=q[1],q2=q[2],q3=q[3];
+    const nx=cos*q0+x0*q3+y0*q2-z0*q1;
+    const ny=cos*q1-x0*q2+y0*q3+z0*q0;
+    const nz=cos*q2+x0*q1-y0*q0+z0*q3;
+    const nw=cos*q3-x0*q0-y0*q1-z0*q2;
+    const magnitude=Math.sqrt(nx*nx+ny*ny+nz*nz+nw*nw)||1;
+    q[0]=nx/magnitude;q[1]=ny/magnitude;q[2]=nz/magnitude;q[3]=nw/magnitude;
     // Position still renders every frame. Rebuild the costly sphere texture
     // only after its markings rotate enough to change a visible pixel.
     b.spriteAngle+=rate*dt;
@@ -432,14 +439,18 @@
   }
   function update(dt) {
     if(state.stroke&&(state.stroke.age+=dt)>state.stroke.duration)state.stroke=null;
-    state.pocketAnimations=state.pocketAnimations.filter(a=>{
+    const falling=state.pocketAnimations;
+    let alive=0;
+    for(let i=0;i<falling.length;i++){
+      const a=falling[i];
       advancePocketFall(a,dt);
       advanceBallOrientation(a.visual,dt);
       if(!a.sounded&&.5*GRAVITY*a.age*a.age>=POCKET_BOTTOM){
         a.sounded=true;window.PoolAudio?.play('pocket',Math.hypot(a.impact,GRAVITY*a.age),{key:`${a.visual.n}:${a.pocket}`,x:a.effectX});
       }
-      return a.age<a.duration;
-    });
+      if(a.age<a.duration)falling[alive++]=a;
+    }
+    falling.length=alive;
     if(state.phase!=='moving')return;
     if(state.windup>0){
       const wait=Math.min(dt,state.windup);state.windup-=wait;dt-=wait;
@@ -448,7 +459,12 @@
     }
     state.shotTime+=dt;
     physicsStep(state.balls,dt,true);
-    if(live().every(b=>Math.hypot(b.vx,b.vy)<.12&&Math.hypot(b.rollVx,b.rollVy)<.12&&Math.abs(b.spin)<.12))state.stopTime+=dt;else state.stopTime=0;
+    let settled=true;
+    for(const b of state.balls){
+      if(b.pocketed)continue;
+      if(b.vx*b.vx+b.vy*b.vy>=.0144||b.rollVx*b.rollVx+b.rollVy*b.rollVy>=.0144||Math.abs(b.spin)>=.12){settled=false;break;}
+    }
+    if(settled)state.stopTime+=dt;else state.stopTime=0;
     if(state.stopTime>.3&&state.pocketAnimations.length===0||state.shotTime>30){for(const b of live()){b.vx=0;b.vy=0;b.rollVx=0;b.rollVy=0;b.spin=0;}endShot();}
   }
   function spotBall(n) {
@@ -1315,6 +1331,7 @@
     if(commit){state.ballInHand=false;say(`白球已摆放。${actor(state.turn)}请瞄准击球。`);updateUI();}
     render();return true;
   }
+  const _movingBalls=[],_sweepFrom={x:0,y:0};
   function physicsStep(balls,dt,animate=false){
     let topSpeed=0,secondSpeed=0,movingCount=0;
     for(const b of balls)if(!b.pocketed){const speed=Math.hypot(b.vx,b.vy);if(speed>.01)movingCount++;
@@ -1326,14 +1343,15 @@
     const contactPasses=movingCount>3?2:1;
     let rackAwake=movingCount>1;
     for(let sub=0;sub<subdivisions;sub++){
-      const moving=balls.filter(b=>!b.pocketed);
+      _movingBalls.length=0;for(const b of balls)if(!b.pocketed)_movingBalls.push(b);
+      const moving=_movingBalls;
       for(const b of moving){
         // Stationary rack balls do not need cloth/rail/pocket work. Contacts
         // below can wake them during this same substep.
         if(b.vx===0&&b.vy===0&&b.rollVx===0&&b.rollVy===0&&b.spin===0)continue;
         clothStep(b,subdt);
         if(animate){advanceBallOrientation(b,subdt);const speed=Math.hypot(b.rollVx,b.rollVy);if(speed>.01){b.roll+=speed*subdt/R;b.rollHeading=Math.atan2(b.rollVy,b.rollVx);}}
-        const from={x:b.x,y:b.y};b.x+=b.vx*subdt;b.y+=b.vy*subdt;
+        const from=_sweepFrom;from.x=b.x;from.y=b.y;b.x+=b.vx*subdt;b.y+=b.vy*subdt;
         const endX=b.x,endY=b.y;rails(b);
         // Sweep only a free segment; a cushion correction is a different path.
         const fall=pocketCheck(b,b.x===endX&&b.y===endY?from:null,subdt);
@@ -1580,7 +1598,7 @@
       const screenContext=ctx;ctx=layer.getContext('2d');
       // Rounded backing dimensions can leave a fractional last row. Make
       // the cached layer opaque before applying logical coordinates.
-      ctx.fillStyle='#090e17';ctx.fillRect(0,0,layer.width,layer.height);
+      ctx.fillStyle='#0b0906';ctx.fillRect(0,0,layer.width,layer.height);
       ctx.setTransform(PIXEL_RATIO,0,0,PIXEL_RATIO,0,0);
       try{paintTable();tableBackdrop=layer;}finally{ctx=screenContext;}
     }
@@ -1599,49 +1617,49 @@
   }
   function paintTable(){
     const l=OX,t=OY,r=OX+W*SCALE,b=OY+H*SCALE;
-    ctx.fillStyle='#090e17';ctx.fillRect(0,0,VIEW_W,VIEW_H);
+    ctx.fillStyle='#0b0906';ctx.fillRect(0,0,VIEW_W,VIEW_H);
     ctx.shadowColor='#000b';ctx.shadowBlur=30;ctx.shadowOffsetY=12;
     const frame=ctx.createLinearGradient(0,t-48,0,b+48);
-    frame.addColorStop(0,'#8b7962');frame.addColorStop(.08,'#20262c');frame.addColorStop(.48,'#0c1016');frame.addColorStop(.94,'#20262c');frame.addColorStop(1,'#7a6958');
+    frame.addColorStop(0,'#7a5735');frame.addColorStop(.08,'#2b1d13');frame.addColorStop(.48,'#160f0a');frame.addColorStop(.94,'#2b1d13');frame.addColorStop(1,'#6b4b2e');
     fillRect(l-50,t-50,W*SCALE+100,H*SCALE+100,30,frame);
     ctx.shadowBlur=0;ctx.shadowOffsetY=0;
-    ctx.strokeStyle='#c6a98579';ctx.lineWidth=2;roundedRect(l-48,t-48,W*SCALE+96,H*SCALE+96,29);ctx.stroke();
-    fillRect(l-37,t-37,W*SCALE+74,H*SCALE+74,22,'#092c3b');
+    ctx.strokeStyle='#d8b06a55';ctx.lineWidth=2;roundedRect(l-48,t-48,W*SCALE+96,H*SCALE+96,29);ctx.stroke();
+    fillRect(l-37,t-37,W*SCALE+74,H*SCALE+74,22,'#10231b');
     const felt=ctx.createRadialGradient(l+W*SCALE*.45,t+H*SCALE*.35,10,l+W*SCALE*.5,t+H*SCALE*.5,690);
-    felt.addColorStop(0,'#8bc5dd');felt.addColorStop(.65,'#7dbbd5');felt.addColorStop(1,'#68a8c4');
+    felt.addColorStop(0,'#2f8a6c');felt.addColorStop(.65,'#227259');felt.addColorStop(1,'#185843');
     ctx.fillStyle=felt;ctx.fillRect(l-5,t-5,W*SCALE+10,H*SCALE+10);
-    ctx.save();ctx.strokeStyle='#29597250';ctx.lineWidth=1.2;ctx.setLineDash([8,7]);
+    ctx.save();ctx.strokeStyle='#0e3a2c66';ctx.lineWidth=1.2;ctx.setLineDash([8,7]);
     ctx.beginPath();ctx.moveTo(l+HEAD_LINE*SCALE,t+2);ctx.lineTo(l+HEAD_LINE*SCALE,b-2);ctx.stroke();ctx.restore();
     // Original tide-ribbon print sits beneath the cloth fibres.
     const brandX=l+W*SCALE/2,brandY=t+H*SCALE/2;
-    drawChengyuEmblem(brandX,brandY-28,1,.55,'#235f7c');
-    ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#275b72c4';
-    ctx.font='600 25px "PingFang SC", "Microsoft YaHei", sans-serif';ctx.fillText('澄  域',brandX,brandY+42);
-    ctx.fillStyle='#275b72ad';ctx.font='600 10px Arial, sans-serif';ctx.fillText('C 1   /   T I D E L I N E',brandX,brandY+66);ctx.restore();
+    drawChengyuEmblem(brandX,brandY-28,1,.5,'#1d5b46');
+    ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#1d5b46c9';
+    ctx.font='600 25px "PingFang SC", "Microsoft YaHei", sans-serif';ctx.fillText('苍  梧',brandX,brandY+42);
+    ctx.fillStyle='#1d5b46a8';ctx.font='600 10px Arial, sans-serif';ctx.fillText('C W - 1   /   C A N G W U',brandX,brandY+66);ctx.restore();
     // Sparse fibres are cached, rather than repainting 56,000 per frame.
     let seed=19327;
     for(let i=0;i<18000;i++){
       seed=(seed*1664525+1013904223)>>>0;const x=l+(seed>>>8)%(r-l);
       seed=(seed*1664525+1013904223)>>>0;const y=t+(seed>>>8)%(b-t);
-      ctx.fillStyle=i%4?'#effaff10':'#1c536510';ctx.fillRect(x,y,1.2,.4);
+      ctx.fillStyle=i%4?'#fdf6e30a':'#07251c12';ctx.fillRect(x,y,1.2,.4);
     }
     // Felt nap and a restrained cushion contact shadow, baked once at DPR.
     ctx.save();ctx.beginPath();ctx.rect(l,t,W*SCALE,H*SCALE);ctx.clip();
     for(const [x1,y1,x2,y2,w,h] of [[l,t,l,t+18,W*SCALE,18],[l,b,l,b-18,W*SCALE,-18],[l,t,l+18,t,18,H*SCALE],[r,t,r-18,t,-18,H*SCALE]]){
-      const shade=ctx.createLinearGradient(x1,y1,x2,y2);shade.addColorStop(0,'#19465e38');shade.addColorStop(1,'#19465e00');ctx.fillStyle=shade;ctx.fillRect(x1,y1,w,h);
+      const shade=ctx.createLinearGradient(x1,y1,x2,y2);shade.addColorStop(0,'#0b2c2138');shade.addColorStop(1,'#0b2c2100');ctx.fillStyle=shade;ctx.fillRect(x1,y1,w,h);
     }
     ctx.restore();
     const railWidth=27;
     const rubberPaint=(outerX,outerY,noseX,noseY)=>{
       const paint=ctx.createLinearGradient(outerX,outerY,noseX,noseY);
-      paint.addColorStop(0,'#47788e');paint.addColorStop(.30,'#91c9df');paint.addColorStop(.76,'#6baac5');paint.addColorStop(1,'#3d718a');
+      paint.addColorStop(0,'#14503c');paint.addColorStop(.30,'#2f8a6b');paint.addColorStop(.76,'#247257');paint.addColorStop(1,'#114634');
       return paint;
     };
     function horizontal(a,z,y,sign){
       const x1=l+a*SCALE,x2=l+z*SCALE,outer=y-sign*railWidth;
       const rubber=rubberPaint(0,outer,0,y);
       ctx.beginPath();ctx.moveTo(x1,y);ctx.lineTo(x2,y);ctx.lineTo(x2+17,outer);ctx.lineTo(x1-17,outer);ctx.closePath();ctx.fillStyle=rubber;ctx.fill();
-      ctx.beginPath();ctx.moveTo(x1,y-sign);ctx.lineTo(x2,y-sign);ctx.strokeStyle='#58bcd055';ctx.lineWidth=2;ctx.stroke();
+      ctx.beginPath();ctx.moveTo(x1,y-sign);ctx.lineTo(x2,y-sign);ctx.strokeStyle='#c9a15c3d';ctx.lineWidth=2;ctx.stroke();
     }
     for(const [a,z] of [[CUT,SIDE_L],[SIDE_R,W-CUT]]){
       horizontal(a,z,t,1);horizontal(a,z,b,-1);
@@ -1650,20 +1668,20 @@
       const sign=x===l?-1:1,upper=t+CUT*SCALE,lower=b-CUT*SCALE;
       const rubber=rubberPaint(x+sign*railWidth,0,x,0);
       ctx.beginPath();ctx.moveTo(x,upper);ctx.lineTo(x,lower);ctx.lineTo(x+sign*railWidth,lower+17);ctx.lineTo(x+sign*railWidth,upper-17);ctx.closePath();ctx.fillStyle=rubber;ctx.fill();
-      ctx.beginPath();ctx.moveTo(x+sign,upper);ctx.lineTo(x+sign,lower);ctx.strokeStyle='#58bcd055';ctx.lineWidth=2;ctx.stroke();
+      ctx.beginPath();ctx.moveTo(x+sign,upper);ctx.lineTo(x+sign,lower);ctx.strokeStyle='#c9a15c3d';ctx.lineWidth=2;ctx.stroke();
     }
     // Silver corner caps and middle-pocket brackets match the reference.
     for(const [x,y] of [[l,t],[r,t],[l,b],[r,b]]){
       const sx=x===l?1:-1,sy=y===t?1:-1;
       ctx.save();ctx.translate(x,y);ctx.scale(sx,sy);
       const metal=ctx.createLinearGradient(-33,-33,36,36);
-      metal.addColorStop(0,'#edf0ed');metal.addColorStop(.2,'#747e83');metal.addColorStop(.5,'#d0d9dc');metal.addColorStop(.78,'#525e63');metal.addColorStop(1,'#bdc8ca');
+      metal.addColorStop(0,'#f2e2bd');metal.addColorStop(.2,'#8a6a2f');metal.addColorStop(.5,'#d8b06a');metal.addColorStop(.78,'#5c451c');metal.addColorStop(1,'#c9a15c');
       ctx.fillStyle=metal;ctx.beginPath();ctx.moveTo(-34,39);ctx.lineTo(-34,-13);ctx.quadraticCurveTo(-34,-34,-13,-34);ctx.lineTo(39,-34);ctx.lineTo(39,-27);ctx.lineTo(10,-27);ctx.quadraticCurveTo(-27,-27,-27,10);ctx.lineTo(-27,39);ctx.closePath();ctx.fill();ctx.restore();
     }
     for(const y of [t,b]){
       const sy=y===t?-1:1;
       const metal=ctx.createLinearGradient(0,y+sy*28,0,y+sy*46);
-      metal.addColorStop(0,'#e4e9e9');metal.addColorStop(.5,'#6d797e');metal.addColorStop(1,'#c3ced0');
+      metal.addColorStop(0,'#e8d8b0');metal.addColorStop(.5,'#7a5c28');metal.addColorStop(1,'#c9a15c');
       ctx.fillStyle=metal;ctx.fillRect(l+SIDE_L*SCALE-6,Math.min(y+sy*28,y+sy*46),SIDE_MOUTH*SCALE+12,18);
     }
     for(let index=0;index<6;index++){
@@ -1688,15 +1706,15 @@
       ctx.save();drawPocketFallPath(p);ctx.clip();
       // A recessed leather throat: lit near wall, occluded lip, black void.
       const depth=ctx.createRadialGradient(q.x+p.nx*radius*.23,q.y+p.ny*radius*.23,radius*.10,q.x,q.y,radius);
-      depth.addColorStop(0,'#000103');depth.addColorStop(.53,'#010205');depth.addColorStop(.78,'#0c1218');depth.addColorStop(.94,'#28343b');depth.addColorStop(1,'#070d12');
+      depth.addColorStop(0,'#040302');depth.addColorStop(.53,'#070604');depth.addColorStop(.78,'#171310');depth.addColorStop(.94,'#3a2f22');depth.addColorStop(1,'#0a0806');
       ctx.fillStyle=depth;ctx.fillRect(q.x-radius,q.y-radius,radius*2,radius*2);
-      ctx.lineWidth=1.2;ctx.strokeStyle='#81949e32';ctx.beginPath();ctx.arc(q.x,q.y,radius-.8,Math.atan2(-p.ny,-p.nx)-.8,Math.atan2(-p.ny,-p.nx)+.8);ctx.stroke();
+      ctx.lineWidth=1.2;ctx.strokeStyle='#c9a15c26';ctx.beginPath();ctx.arc(q.x,q.y,radius-.8,Math.atan2(-p.ny,-p.nx)-.8,Math.atan2(-p.ny,-p.nx)+.8);ctx.stroke();
       ctx.lineWidth=.65;ctx.strokeStyle='#72808916';
       for(let k=0;k<8;k++){const angle=k*Math.PI/4;ctx.beginPath();ctx.moveTo(q.x+Math.cos(angle)*radius*.88,q.y+Math.sin(angle)*radius*.88);ctx.lineTo(q.x+p.nx*2+Math.cos(angle)*radius*.62,q.y+p.ny*2+Math.sin(angle)*radius*.62);ctx.stroke();}
       ctx.restore();
     }
     ctx.lineCap='butt';
-    ctx.fillStyle='#c8d2d2';
+    ctx.fillStyle='#e8dcc0';
     for(let x=12.5;x<=87.5;x+=12.5){if(x===50)continue;for(const y of [t-40,b+40]){ctx.beginPath();ctx.arc(l+x*SCALE,y,1.9,0,Math.PI*2);ctx.fill();}}
     for(let y=12.5;y<=37.5;y+=12.5)for(const x of [l-40,r+40]){ctx.beginPath();ctx.arc(x,t+y*SCALE,1.9,0,Math.PI*2);ctx.fill();}
     // Inset rail nameplate between sight markers, outside the playing cloth.
@@ -1705,7 +1723,7 @@
     ctx.fillStyle='#d8ca91';ctx.font='italic 700 18px Georgia, "Times New Roman", serif';
     ctx.fillText('C1',nameplateX-25,nameplateY+.5);
     ctx.font='600 12px "Songti SC", SimSun, serif';ctx.fillStyle='#c9bd91';
-    ctx.fillText('澄域',nameplateX+21,nameplateY+.5);ctx.restore();
+    ctx.fillText('苍梧',nameplateX+21,nameplateY+.5);ctx.restore();
   }
   function drawPocketFallPath(p){
     const profile=pocketFallProfile(p),q=worldToScreen(profile.x,profile.y);
@@ -1844,7 +1862,7 @@
       const trail=Math.min(7,speed*.048),weight=Math.min(.16,speed/900);
       ctx.save();ctx.globalAlpha=alpha*weight;ctx.drawImage(b.sprite,x-rr-b.vx/speed*trail,y-rr-b.vy/speed*trail,rr*2,rr*2);ctx.restore();
     }
-    if(shadow){ctx.shadowColor='#00111f70';ctx.shadowBlur=MOBILE_RENDER?1:3;ctx.fillStyle='#092d4265';ctx.beginPath();ctx.ellipse(x+1.8,y+2.8,rr*.96,rr*.86,0,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;}
+    if(shadow){ctx.shadowColor='#00000070';ctx.shadowBlur=MOBILE_RENDER?1:3;ctx.fillStyle='#0a0b0a66';ctx.beginPath();ctx.ellipse(x+1.8,y+2.8,rr*.96,rr*.86,0,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;}
     ctx.drawImage(b.sprite,x-rr,y-rr,rr*2,rr*2);
     ctx.restore();
   }
@@ -1924,7 +1942,7 @@
     const c=cue();if(!c||c.pocketed)return;
     const rawPrediction=displayGuide(true);if(!rawPrediction)return;
     const prediction=visualGuide(rawPrediction);
-    const color=prediction.targetNumber!==null&&!legalTarget(prediction.targetNumber)?'#ff627a':'#e5fff7';
+    const color=prediction.targetNumber!==null&&!legalTarget(prediction.targetNumber)?'#e0554d':'#f6ecdc';
     ctx.save();
     // Draw only the reachable, physically simulated portion of the stroke.
     // Short draw/follow/English paths share the live collision and cloth code.
@@ -1934,7 +1952,7 @@
       const hit=prediction.shotPath.at(-1),object=prediction.objectCenter,end=worldToScreen(hit.x,hit.y),objectCenter=worldToScreen(object.x,object.y);
       ctx.strokeStyle=color;ctx.lineWidth=1.4;ctx.beginPath();ctx.arc(end.x,end.y,R*SCALE,0,Math.PI*2);ctx.stroke();
       ctx.globalAlpha=.45;ctx.beginPath();ctx.moveTo(end.x,end.y);ctx.lineTo(objectCenter.x,objectCenter.y);ctx.stroke();ctx.globalAlpha=1;
-      guidePath(prediction.cuePath,'#a0e6ff',8);
+      guidePath(prediction.cuePath,'#d8c49a',8);
       guidePath(prediction.targetPath,color,11);
 
     }
@@ -2019,15 +2037,6 @@
     const pocket=POCKET_GEOMETRY[a.pocket],pose=pocketAnimationPose(a);
     const center=worldToScreen(pose.x,pose.y+pose.depth),rr=DISPLAY_R*SCALE*pose.scale;
     ctx.save();const mouth=drawPocketFallMask(pocket);
-    // At entry the entire upper hemisphere is still above the lip. Clipping
-    // the whole sprite to the aperture instantly chopped it in half.
-    if(pose.drop<R){
-      // Keep the exposed cap anchored at its lip crossing. Following the
-      // downward camera parallax used to sweep this cap back onto the cloth.
-      const entry=worldToScreen(a.entryX,a.entryY);
-      const cap=DISPLAY_R*SCALE*Math.sqrt(Math.max(0,1-(pose.drop/R)**2));
-      ctx.moveTo(entry.x+cap,entry.y);ctx.arc(entry.x,entry.y,cap,0,Math.PI*2);
-    }
     ctx.clip();
     ctx.globalAlpha=.28*(1-pose.sink);ctx.fillStyle='#000';ctx.beginPath();ctx.ellipse(center.x,center.y,rr*1.08,rr*.5,0,0,Math.PI*2);ctx.fill();
     drawBall(a.visual,pose.scale,pose.x,pose.y+pose.depth,pose.alpha,false);
@@ -2035,7 +2044,23 @@
     const shade=ctx.createRadialGradient(center.x-rr*.24,center.y-rr*.28,rr*.08,center.x,center.y,rr*1.08);
     shade.addColorStop(0,'rgba(0,0,0,0)');shade.addColorStop(.58,`rgba(0,0,0,${.14+.32*pose.sink})`);shade.addColorStop(1,'rgba(0,0,0,.97)');
     ctx.fillStyle=shade;ctx.beginPath();ctx.arc(center.x,center.y,rr,0,Math.PI*2);ctx.fill();ctx.restore();
-    ctx.save();ctx.globalAlpha=.82*clamp(pose.drop/R,0,1)*(1-pose.sink*.7);ctx.strokeStyle='#030608';ctx.lineWidth=3;
+    // The part of the ball still above the lip stays visible, but only inside
+    // the mouth opening: it may not paint over the cloth or the rail bevel.
+    if(pose.drop<R){
+      const entry=worldToScreen(a.entryX,a.entryY);
+      const cap=DISPLAY_R*SCALE*Math.sqrt(Math.max(0,1-(pose.drop/R)**2));
+      const disk=worldToScreen(pocket.mx,pocket.my);
+      ctx.save();
+      ctx.beginPath();ctx.arc(disk.x,disk.y,pocket.radius*SCALE,0,Math.PI*2);ctx.clip();
+      ctx.beginPath();ctx.arc(entry.x,entry.y,cap,0,Math.PI*2);ctx.clip();
+      drawBall(a.visual,pose.scale,pose.x,pose.y+pose.depth,pose.alpha*.92,false);
+      ctx.restore();
+    }
+    // At entry the upper hemisphere is still above the lip. Keep it clipped to
+    // the mouth opening: the old single path was a union of aperture and cap and
+    // let the falling ball paint over the cloth and rail.
+    ctx.save();drawPocketFallMask(pocket);ctx.clip();
+    ctx.globalAlpha=.82*clamp(pose.drop/R,0,1)*(1-pose.sink*.7);ctx.strokeStyle='#030608';ctx.lineWidth=3;
     ctx.beginPath();ctx.arc(mouth.well.x,mouth.well.y,mouth.radius,mouth.start,mouth.end);ctx.stroke();ctx.restore();
   }
   let tableSurface=null;

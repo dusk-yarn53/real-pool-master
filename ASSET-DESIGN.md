@@ -1,6 +1,6 @@
 # 浮光竞技馆原创视觉
 
-游戏命名沿用用户确认的“光域台球 / GUANGYU BILLIARDS”（早期名称为小糖台球）。虚构赛场使用“浮光竞技馆 / FUGUANG ARENA”，球杆“弧影 01 / HUYING 01”，台呢“澄域 C1 / CHENGYU C1”。
+游戏命名沿用用户确认的“光域台球 / GUANGYU BILLIARDS”（早期名称为小糖台球）。虚构赛场使用“浮光竞技馆 / FUGUANG ARENA”，球杆“弧影 01 / HUYING 01”，台呢“苍梧 CW-1 / CANGWU CW-1”。
 
 背景文件：`assets/fuguang-arena.jpg`。全新创作的空场，不使用用户赛事照片作为输入。通过内置 imagegen 生成，原图保存于工作区 generated_images；项目内压缩为 JPEG。网页文字以 HTML 绘制，不嵌入赛事、赞助商或制造商标识。
 
@@ -10,6 +10,6 @@
 
 Use case: photorealistic-natural. Asset type: original wide 16:9 welcome background for a fictional billiards game venue, named FUGUANG ARENA in the website UI. Generate a completely original imaginary professional cue sports arena, NOT an edit or recreation of an actual photographed arena. Low architectural camera facing an elegant single billiards table positioned in the lower center-right, large clean dark negative space on upper-left for the UI headline. Empty venue, no people, no spectators. Invent unique architecture: curved charcoal acoustic walls and nested asymmetric oval light trusses, subtle silver ribbed balcony, dark empty seating blurred into shadows. Four crisp white overhead spotlight beams visible in very light haze, saturated midnight blue and muted cyan fill lighting with restrained amber edge accents. Table has deep petrol teal cloth, original matte graphite split-pedestal chassis with a brushed bronze central arch, no manufacturer markings. Professional editorial interior photography, believable table proportions and clean materials, dramatic but restrained exposure, high detail, luxurious calm competitive atmosphere. No logos, no lettering, no brands, no watermarks, no DLT/DUYA motifs, no sponsor banners, no real-world event identifiers. Landscape composition wide 16:9.
 
-## 澄域潮线印记
+## 苍梧潮线印记
 
 2026-10-09 重绘台呢原创标识：三条错位的潮线包围偏心水滴，辅以一条细铜弧，与弧影球杆的铜色呼应。名称移至图案下方；图案低透明度印在纤维纹理下，避免遮住球路。使用原生 Canvas 曲线，没有外部品牌图片或字标。

@@ -318,14 +318,18 @@ html,body{margin:0;background:#040b17;color:#e7f7ff;font-family:system-ui,"PingF
     const height = Math.max(1, viewport?.height || window.innerHeight || 390);
     // Fit a landscape surface even when an in-app browser keeps a portrait viewport.
     // Orientation APIs never decide whether the game is visible or playable.
-    const sideways = phone && width < height;
+    // Phones are small in at least one dimension. A touchscreen laptop reports
+    // maxTouchPoints and coarse pointers too, so size decides the layout; it
+    // must not force the compact phone surface onto a desktop window.
+    const compact = phone && Math.min(width, height) < 720;
+    const sideways = compact && width < height;
     if (sideways !== root.classList.contains('is-landscape')) {
       for (const id of ['game', 'cueMeter', 'angleRuler', 'spinEditorBall']) document.getElementById(id)?.dispatchEvent(new Event('pointercancel'));
     }
     root.classList.remove('orientation-blocked');
-    root.classList.toggle('phone-landscape', phone);
+    root.classList.toggle('phone-landscape', compact);
     root.classList.toggle('is-landscape', sideways);
-    root.classList.toggle('is-compact', phone);
+    root.classList.toggle('is-compact', compact);
     surface.inert = false;
     surface.removeAttribute('aria-hidden');
     root.style.setProperty('--visible-height', `${height}px`);
