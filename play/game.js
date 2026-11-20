@@ -1721,7 +1721,7 @@
     ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';
     const nameplateX=l+W*SCALE*.3125,nameplateY=b+40;
     ctx.fillStyle='#d8ca91';ctx.font='italic 700 18px Georgia, "Times New Roman", serif';
-    ctx.fillText('C1',nameplateX-25,nameplateY+.5);
+    ctx.fillText('CW-1',nameplateX-32,nameplateY+.5);
     ctx.font='600 12px "Songti SC", SimSun, serif';ctx.fillStyle='#c9bd91';
     ctx.fillText('苍梧',nameplateX+21,nameplateY+.5);ctx.restore();
   }
