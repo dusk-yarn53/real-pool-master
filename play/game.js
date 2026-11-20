@@ -1104,19 +1104,39 @@
     return routes.map(p=>({...p,distance:Math.hypot(p.x-c.x,p.y-c.y)})).sort((a,b)=>a.distance-b.distance);
   }
   function placeAICue(targets){
-    // Ball in hand: align behind an unobstructed pot instead of placing next
-    // to the first numbered ball regardless of its path to the pocket.
+    // Ball in hand: try positions behind each pot line, then verify a real shot
+    // from that spot instead of trusting geometry alone. The AI used to leave
+    // the cue in a corner when the first geometric option failed.
     const options=[];
     for(const target of targets)for(let pocket=0;pocket<6;pocket++){
       const p=pocketAim(pocket),pd=Math.hypot(p.x-target.x,p.y-target.y);
       if(pd<.1||!lineClear(target.x,target.y,p.x,p.y,[0,target.n]))continue;
-      for(const distance of [12,18,8]){
-        const x=target.x-(p.x-target.x)/pd*distance,y=target.y-(p.y-target.y)/pd*distance;
-        if(validCuePosition(x,y)&&lineClear(x,y,target.x,target.y,[0,target.n]))options.push({x,y,score:pd+Math.abs(distance-12)});
+      const ux=(p.x-target.x)/pd,uy=(p.y-target.y)/pd;
+      for(const distance of [8,12,18,26])for(const spread of [-.16,0,.16]){
+        const ang=Math.atan2(uy,ux)+spread;
+        const x=target.x-Math.cos(ang)*distance,y=target.y-Math.sin(ang)*distance;
+        if(!validCuePosition(x,y)||!lineClear(x,y,target.x,target.y,[0,target.n]))continue;
+        options.push({x,y,target:target.n,pocket,pd,distance,spread:Math.abs(spread)});
       }
     }
-    options.sort((a,b)=>a.score-b.score);
+    options.sort((a,b)=>(a.pd+a.distance*.15+a.spread*30)-(b.pd+b.distance*.15+b.spread*30));
+    let best=null;
+    for(const o of options.slice(0,12)){
+      const targetBall=state.balls.find(b=>b.n===o.target);
+      if(!targetBall)continue;
+      const shoot=Math.atan2(targetBall.y-o.y,targetBall.x-o.x);
+      for(const power of [48,66,84]){
+        const result=simulateAIShot({aim:shoot,power,spinX:0,spinY:0,target:o.target,potTarget:o.pocket,pocket:o.pocket,type:'attack'});
+        if(!result||!result.safe||!(result.potted||result.winning))continue;
+        const score=aiPositionScore(result)+o.distance*.25;
+        if(!best||score<best.score)best={score,x:o.x,y:o.y};
+      }
+      if(best&&best.score<6)break;
+    }
+    if(best){cue().x=best.x;cue().y=best.y;return;}
+    // Geometric fallback: keep the best pot line even if the simulation misses.
     if(options.length){cue().x=options[0].x;cue().y=options[0].y;return;}
+    for(let y=H/2;y>R;y-=4)for(let x=W/4;x>R;x-=4)if(validCuePosition(x,y)){cue().x=x;cue().y=y;return;}
     for(let y=R+2;y<H-R;y+=4)for(let x=R+2;x<W-R;x+=4)if(validCuePosition(x,y)){cue().x=x;cue().y=y;return;}
   }
   function diverseAIOptions(options,limit=12){
@@ -1351,11 +1371,23 @@
         if(b.vx===0&&b.vy===0&&b.rollVx===0&&b.rollVy===0&&b.spin===0)continue;
         clothStep(b,subdt);
         if(animate){advanceBallOrientation(b,subdt);const speed=Math.hypot(b.rollVx,b.rollVy);if(speed>.01){b.roll+=speed*subdt/R;b.rollHeading=Math.atan2(b.rollVy,b.rollVx);}}
-        const from=_sweepFrom;from.x=b.x;from.y=b.y;b.x+=b.vx*subdt;b.y+=b.vy*subdt;
-        const endX=b.x,endY=b.y;rails(b);
-        // Sweep only a free segment; a cushion correction is a different path.
-        const fall=pocketCheck(b,b.x===endX&&b.y===endY?from:null,subdt);
-        if(fall){const remaining=fall.entryRemainder+(subdivisions-sub-1)*subdt;advancePocketFall(fall,remaining);advanceBallOrientation(fall.visual,remaining);}
+        const from=_sweepFrom;from.x=b.x;from.y=b.y;
+        // Near a mouth the jaw is only a fraction of a ball wide; a fast ball can
+        // cross it inside one substep. Micro-step only there, so the rest of the
+        // table keeps its current cost.
+        let micro=1;
+        for(const p of POCKET_GEOMETRY){const dx=b.x-p.mx,dy=b.y-p.my,reach=p.radius+2.4*R;if(dx*dx+dy*dy<reach*reach){
+          const travel=Math.sqrt(b.vx*b.vx+b.vy*b.vy)*subdt;micro=Math.max(micro,Math.min(6,Math.ceil(travel/(R*.32))));break;}}
+        const microDt=subdt/micro;let fall=null,remainingDt=0;
+        for(let m=0;m<micro;m++){
+          b.x+=b.vx*microDt;b.y+=b.vy*microDt;
+          const endX=b.x,endY=b.y;
+          rails(b);
+          const stepFrom=m===0?from:null;
+          fall=pocketCheck(b,b.x===endX&&b.y===endY?stepFrom:null,microDt);
+          if(fall){remainingDt=microDt*(micro-m-1);break;}
+        }
+        if(fall){const remaining=fall.entryRemainder+remainingDt+(subdivisions-sub-1)*subdt;advancePocketFall(fall,remaining);advanceBallOrientation(fall.visual,remaining);}
       }
       // Two contact passes settle dense racks. The second only resolves
       // remaining overlap; a separating pair receives no extra impulse.
@@ -1417,7 +1449,8 @@
     return trimmed;
   }
   let guideJob=null,guideTimerPending=false;
-  function guideDragging(){return state.drag?.kind==='aim'&&state.drag.moved||!!angleDrag;}
+  let powerDragging=false;
+  function guideDragging(){return state.drag?.kind==='aim'&&state.drag.moved||!!angleDrag||powerDragging;}
   function guideKey(){return [state.mode,state.aim,state.power,state.spinX,state.spinY,state.breaking,...state.balls.flatMap(b=>[b.n,b.x,b.y,b.vx,b.vy,b.rollVx,b.rollVy,b.spin,b.pocketed?1:0])].join(',');}
   function runGuideSlice(){
     guideTimerPending=false;
@@ -1436,7 +1469,7 @@
     const c=cue();if(!c||c.pocketed)return null;
     const a=state.aim-state.spinX/Math.max(1,Math.hypot(state.spinX,state.spinY))*.018,dx=Math.cos(a),dy=Math.sin(a);
     const hit=firstBallOnRay(c.x,c.y,dx,dy,[0]),boundary=firstBoundaryOnRay(c.x,c.y,dx,dy);
-    const reachKey=[state.power,state.spinX,state.spinY,state.breaking,state.mode].join(',');
+    const reachKey=[Math.round(state.power/2)*2,state.spinX,state.spinY,state.breaking,state.mode].join(',');
     if(reachKey!==guideReachKey){
       const probe=ball(0,0,0);applyCueImpulse(probe,state.power,0,state.spinX,state.spinY,state.breaking);
       guideReach=0;guideApproach=[{distance:0,...probe}];
@@ -1931,6 +1964,8 @@
     if(!guideRefinement)return prediction;
     const t=clamp((now-guideRefinement.start)/100,0,1),f=t*t*(3-2*t),from=guideRefinement.from;
     if(t>=1){guideRefinement=null;return prediction;}
+    const lengthOf=p=>{let total=0;for(let i=1;i<p.length;i++)total+=Math.hypot(p[i].x-p[i-1].x,p[i].y-p[i-1].y);return total;};
+    if(lengthOf(prediction.shotPath)<lengthOf(from.shotPath)*.98)return prediction;
     const blend=name=>{
       const a=from[name],b=prediction[name];if(!a.length||!b.length)return b;
       return Array.from({length:24},(_,i)=>{const p=sampleGuidePath(a,i/23),q=sampleGuidePath(b,i/23);return {x:p.x+(q.x-p.x)*f,y:p.y+(q.y-p.y)*f};});
@@ -2022,7 +2057,7 @@
     const fade=clamp((drop-5*R)/(POCKET_HIDE_DEPTH-5*R),0,1);
     // A slight overhead-camera parallax makes gravity visible. The aperture
     // and shrinking above-lip cap occlude this displacement, even at corners.
-    return {t,sink,x:a.fallX,y:a.fallY,scale:1/(1+drop/(24*R)),alpha:1-fade*fade*(3-2*fade),depth:drop*.38,drop};
+    return {t,sink,x:a.fallX,y:a.fallY,scale:1/(1+drop/(16*R)),alpha:1-fade*fade*(3-2*fade),depth:drop*.62,drop};
   }
   function drawPocketFallMask(pocket){
     const profile=pocketFallProfile(pocket),well=worldToScreen(profile.x,profile.y);
@@ -2308,6 +2343,8 @@
   $('spinEditorCenter').addEventListener('click',()=>{if(spinDraft){spinDraft={spinX:0,spinY:0};drawSpinDraft();}});
   spinOverlay.addEventListener('click',e=>{if(e.target===spinOverlay)closeSpinEditor();});
   $('resetSpin').addEventListener('click',()=>{if(!canAdjustStroke())return;state.spinX=0;state.spinY=0;moveSpinDot();requestAimFrame();});
+  $('power').addEventListener('pointerdown',()=>{powerDragging=true;});
+  for(const name of ['pointerup','pointercancel','change','blur'])$('power').addEventListener(name,()=>{if(!powerDragging)return;powerDragging=false;requestAimFrame();});
   $('power').addEventListener('input',e=>{if(!canAdjustStroke())return;state.power=Number(e.target.value);syncPowerUI();render();});
   function openPracticeMenu(rules=state.mode==='eight'?'eight':'nine'){
     state.practiceRuleset=rules;
