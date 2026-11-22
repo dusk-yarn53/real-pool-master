@@ -74,7 +74,7 @@ python3 -m http.server 8765
 
 ## 音频署名
 
-背景音乐使用用户提供的 `sounds/guangyu-intro.mp3` 与 `sounds/guangyu-game-loop.m4a`。原测试钢琴曲已不加载，其归档许可见 [MUSIC-LICENSE.md](sounds/MUSIC-LICENSE.md)。台球碰撞片段来自 Dsw4 录制并释放至公有领域的 [Pool Sounds.ogg](https://commons.wikimedia.org/wiki/File:Pool_Sounds.ogg)。
+背景音乐为 Kevin MacLeod 的《Meditation Impromptu 02》（欢迎页）与《Airport Lounge》（对局），CC BY 4.0，已裁剪并转码；署名与来源见 [sounds/MUSIC-LICENSE.md](sounds/MUSIC-LICENSE.md)。原测试钢琴曲已不加载，其归档许可见 [MUSIC-LICENSE.md](sounds/MUSIC-LICENSE.md)。台球碰撞片段来自 Dsw4 录制并释放至公有领域的 [Pool Sounds.ogg](https://commons.wikimedia.org/wiki/File:Pool_Sounds.ogg)。
 
 ### 最新手感与落袋调整
 

@@ -2,7 +2,7 @@
   'use strict';
   const startButton=document.getElementById('startBtn');
   const entryMusic=document.getElementById('entryMusic');
-  const introMusic=typeof entryMusic?.play==='function'?entryMusic:new Audio('./sounds/guangyu-intro.mp3');
+  const introMusic=typeof entryMusic?.play==='function'?entryMusic:new Audio('./sounds/guangyu-intro.mp3?v=20261122-cc1');
   introMusic.preload='auto';introMusic.loop=true;introMusic.playsInline=true;introMusic.volume=.32;
   const AudioEngine=window.AudioContext||window.webkitAudioContext;
   let context=null,effects=null,limiter=null,meter=null,effectLoading=null;
@@ -161,7 +161,7 @@
         }));
         decodedPools[kind]=kind==='ball'?buffers.map(b=>prepareClack(b)):buffers.map(b=>prepareClack(b,b.duration,false));
       })).catch(error=>console.warn('低延迟音效未完成预热，暂用原生音频回退。',error));
-      gameMusicLoading=fetch('./sounds/guangyu-game-loop.m4a').then(response=>{
+      gameMusicLoading=fetch('./sounds/guangyu-game-loop.mp3?v=20261122-cc1').then(response=>{
         if(!response.ok)throw Error(`Game music: HTTP ${response.status}`);return response.arrayBuffer();
       }).then(data=>context.decodeAudioData(data)).then(buffer=>{gameMusicBuffer=buffer;}).catch(error=>console.warn('对局背景音乐未加载。',error));
     }
