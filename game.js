@@ -647,7 +647,7 @@
       const cd=Math.hypot(gx-c.x,gy-c.y),cos=((gx-c.x)*nx+(gy-c.y)*ny)/Math.max(cd,.01);
       if(gx<R||gx>W-R||gy<R||gy>H-R||cos<.28||!lineClear(c.x,c.y,gx,gy,[0,target.n]))continue;
       // Wide cuts and long object-ball travel are less forgiving than cue travel.
-      const option={target:target.n,pocket,aim:Math.atan2(gy-c.y,gx-c.x),cd,pd,cos,score:pd*.95+cd*.32+(1-cos)*86+Math.abs(lateral)*2};
+      const option={target:target.n,pocket,aim:Math.atan2(gy-c.y,gx-c.x),cd,pd,cos,score:pd*.8+cd*.35+(1-cos)*70+Math.abs(lateral)*2};
       if(state.aiDifficulty==='hard'){
         const assessment=attackRisk(option,target);if(assessment.unrealistic)continue;
         option.realismRisk=assessment.risk;option.score+=assessment.risk*1.4;
