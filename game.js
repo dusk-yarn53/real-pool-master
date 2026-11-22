@@ -2066,16 +2066,14 @@
   }
   function pocketAnimationPose(a){
     const t=clamp(a.age/a.duration,0,1);
-    // The ball rolls onto the mouth before gravity takes over; a short delay
-    // keeps the entry frame a full circle instead of an instantly cut shape.
-    const fallAge=Math.max(0,a.age-.055),drop=.5*GRAVITY*fallAge*fallAge,sink=clamp(drop/POCKET_HIDE_DEPTH,0,1);
-    const fade=clamp((drop-5*R)/(POCKET_HIDE_DEPTH-5*R),0,1);
-    // A slight overhead-camera parallax makes gravity visible. The aperture
-    // and shrinking above-lip cap occlude this displacement, even at corners.
+    // A short roll-in delay keeps the entry frame a full circle.
+    const fallAge=Math.max(0,a.age-.04),drop=.5*GRAVITY*fallAge*fallAge;
     const pocket=POCKET_GEOMETRY[a.pocket];
-    const ox=pocket.mx-W/2,oy=pocket.my-H/2,olen=Math.hypot(ox,oy)||1;
-    return {t,sink,x:a.fallX,y:a.fallY,scale:1/(1+drop/(10*R)),alpha:1-fade*fade*(3-2*fade),depth:drop*.62,drop,
-      ox:ox/olen,oy:oy/olen,travel:drop*.5};
+    // Depth drives the whole illusion: the ball slides toward the hole centre
+    // while shrinking, so it reads as being swallowed by the mouth instead of
+    // clipped by its edge. No aperture clip is needed for the ball itself.
+    const k=clamp(drop/(2.3*R),0,1);
+    return {t,sink:k,x:a.fallX,y:a.fallY,scale:Math.max(.16,1-.78*k),alpha:1-clamp((k-.55)/.45,0,1),depth:drop*.62,drop};
   }
   function drawPocketFallMask(pocket){
     const profile=pocketFallProfile(pocket),well=worldToScreen(profile.x,profile.y);
@@ -2088,7 +2086,9 @@
   }
   function drawPocketEffect(a){
     const pocket=POCKET_GEOMETRY[a.pocket],pose=pocketAnimationPose(a);
-    const bx=pose.x+pose.ox*pose.travel,by=pose.y+pose.oy*pose.travel;
+    // Visual drift into the hole; the stored position stays the physical one.
+    const bx=pose.x+(pocket.well.x-pose.x)*pose.sink*.55;
+    const by=pose.y+(pocket.well.y-pose.y)*pose.sink*.55;
     const center=worldToScreen(bx,by),rr=DISPLAY_R*SCALE*pose.scale;
     ctx.save();const mouth=drawPocketFallMask(pocket);
     ctx.clip();
@@ -2097,22 +2097,7 @@
     const shade=ctx.createRadialGradient(center.x-rr*.24,center.y-rr*.28,rr*.08,center.x,center.y,rr*1.08);
     shade.addColorStop(0,'rgba(0,0,0,0)');shade.addColorStop(.58,`rgba(0,0,0,${.14+.32*pose.sink})`);shade.addColorStop(1,'rgba(0,0,0,.97)');
     ctx.fillStyle=shade;ctx.beginPath();ctx.arc(center.x,center.y,rr,0,Math.PI*2);ctx.fill();ctx.restore();
-    ctx.save();
-    if(pose.drop>R*.3)drawPocketFallMask(pocket),ctx.clip();
     drawBall(a.visual,pose.scale,bx,by,pose.alpha,false);
-    ctx.restore();
-    // The part of the ball still above the lip stays visible, but only inside
-    // the mouth opening: it may not paint over the cloth or the rail bevel.
-    if(pose.drop<R){
-      const entry=worldToScreen(a.entryX,a.entryY);
-      const cap=DISPLAY_R*SCALE*Math.sqrt(Math.max(0,1-(pose.drop/R)**2));
-      const disk=worldToScreen(pocket.mx,pocket.my);
-      ctx.save();
-      ctx.beginPath();ctx.arc(disk.x,disk.y,pocket.radius*SCALE,0,Math.PI*2);ctx.clip();
-      ctx.beginPath();ctx.arc(entry.x,entry.y,cap,0,Math.PI*2);ctx.clip();
-      drawBall(a.visual,pose.scale,pose.x,pose.y+pose.depth,pose.alpha*.92,false);
-      ctx.restore();
-    }
     // At entry the upper hemisphere is still above the lip. Keep it clipped to
     // the mouth opening: the old single path was a union of aperture and cap and
     // let the falling ball paint over the cloth and rail.
@@ -2775,7 +2760,7 @@
     try{
       const api=window.PoolSave;
       if(!api||api.available===false||state.phase!=='aim'||state.practice||!state.balls.length)return;
-      api.save({mode:state.mode,opponent:state.opponent,difficulty:state.aiDifficulty,
+      api.save({slot:`${state.mode}:${state.opponent}:${state.aiDifficulty}`,mode:state.mode,opponent:state.opponent,difficulty:state.aiDifficulty,
         balls:state.balls.map(b=>({n:b.n,x:+b.x.toFixed(3),y:+b.y.toFixed(3),pocketed:!!b.pocketed})),
         turn:state.turn,groups:[...state.groups],scores:[...state.scores],matchScores:[...state.matchScores],
         breaking:!!state.breaking,ballInHand:!!state.ballInHand,aim:state.aim,power:state.power,rackSeed:state.rackSeed});
@@ -2785,6 +2770,13 @@
     try{
       const api=window.PoolSave,snap=api&&api.load&&api.load();
       if(!snap)return false;
+      const live=snap.balls.filter(b=>b&&!b.pocketed);
+      const inBounds=live.every(b=>Number.isFinite(b.x)&&Number.isFinite(b.y)&&b.x>=-R&&b.x<=W+R&&b.y>=-R&&b.y<=H+R);
+      let overlap=false;
+      for(let i=0;i<live.length&&!overlap;i++)for(let j=i+1;j<live.length;j++){
+        if(Math.hypot(live[i].x-live[j].x,live[i].y-live[j].y)<2*R*.95){overlap=true;break;}
+      }
+      if(!inBounds||overlap||!live.some(b=>b.n===0)){api.clear?.();return false;}
       state.mode=snap.mode||'eight';state.opponent=snap.opponent==='ai'?'ai':'local';
       state.aiDifficulty=snap.difficulty||'normal';
       state.balls=snap.balls.map(b=>Object.assign(ball(b.n,b.x,b.y),{pocketed:!!b.pocketed}));
@@ -2806,7 +2798,10 @@
   syncPowerUI();render();initDiagnostics();initBenchmark();
   {const pending=window.PoolSave&&window.PoolSave.load?window.PoolSave.load():null;
    const resume=$('resumeBtn');
-   if(pending&&resume){resume.hidden=false;resume.addEventListener('click',()=>{resume.hidden=true;tryRestore();},{once:true});}}
+   if(pending&&resume){resume.hidden=false;
+     const label=`${pending.mode==='nine'?'九球':'八球'} · ${pending.opponent==='ai'?('人机·'+({easy:'入门',normal:'普通',hard:'大师'}[pending.difficulty]||'普通')):'双人'}`;
+     resume.textContent=`继续上一局（${label}）`;
+     resume.addEventListener('click',()=>{resume.hidden=true;tryRestore();},{once:true});}}
   window.addEventListener?.('pagehide',saveSnapshot);
   document.addEventListener?.('visibilitychange',()=>{if(document.hidden)saveSnapshot();});
   requestAnimationFrame(frame);window.PoolStartup?.ready('game');
