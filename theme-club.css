@@ -165,3 +165,24 @@
 }
 #mobile-pool-preview .welcome-enter.secondary:hover{background:#c9a15c1f}
 #mobile-pool-preview .welcome-enter[hidden]{display:none!important}
+
+/* iOS / 微信适配：适屏模式铺满动态视口，并按刘海与底部安全区留白 */
+#mobile-pool-preview.is-fitted{height:100dvh!important;max-height:100dvh!important;overflow:hidden!important}
+#mobile-pool-preview .mobile-game-surface{
+  padding-left:env(safe-area-inset-left,0px);
+  padding-right:env(safe-area-inset-right,0px);
+  box-sizing:border-box;
+}
+#mobile-pool-preview footer{padding-bottom:max(10px,env(safe-area-inset-bottom,0px))}
+#mobile-pool-preview .fullscreen-hint{
+  position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);
+  z-index:60;max-width:min(92vw,520px);padding:10px 14px;border-radius:8px;
+  background:#0d0a08f2;border:1px solid #c9a15c88;color:#f0e6d3;font-size:12px;line-height:1.6;
+  text-align:center;box-shadow:0 10px 30px #000a;display:none;
+}
+#mobile-pool-preview .fullscreen-hint.show{display:block}
+
+/* iOS 触控细节：去掉长按菜单与双击缩放干扰，保留滚动 */
+#mobile-pool-preview{-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;overscroll-behavior:none}
+#mobile-pool-preview .mobile-game-surface{touch-action:manipulation;user-select:none;-webkit-user-select:none}
+#mobile-pool-preview canvas{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
