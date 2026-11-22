@@ -158,3 +158,10 @@
 
 /* 页脚 */
 #mobile-pool-preview footer{color:#7d6c56}
+
+#mobile-pool-preview .welcome-enter.secondary{
+  margin-top:10px;background:transparent;border:1px solid #c9a15c88;color:#e8dcc0;
+  box-shadow:none;font-weight:600;letter-spacing:.12em;
+}
+#mobile-pool-preview .welcome-enter.secondary:hover{background:#c9a15c1f}
+#mobile-pool-preview .welcome-enter[hidden]{display:none!important}

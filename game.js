@@ -2799,7 +2799,10 @@
     }catch(e){return false;}
   }
   cueTexture=buildCueTexture();
-  syncPowerUI();render();initDiagnostics();initBenchmark();tryRestore();
+  syncPowerUI();render();initDiagnostics();initBenchmark();
+  {const pending=window.PoolSave&&window.PoolSave.load?window.PoolSave.load():null;
+   const resume=$('resumeBtn');
+   if(pending&&resume){resume.hidden=false;resume.addEventListener('click',()=>{tryRestore();},{once:true});}}
   window.addEventListener?.('pagehide',saveSnapshot);
   document.addEventListener?.('visibilitychange',()=>{if(document.hidden)saveSnapshot();});
   requestAnimationFrame(frame);window.PoolStartup?.ready('game');
