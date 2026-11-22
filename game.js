@@ -1522,7 +1522,12 @@
     const key=guideKey();
     if(key===displayGuideKey)return displayGuideCache;
     if(interactive){
-      if(guideDragging()){guideJob=null;return quickGuide();}
+      if(guideDragging()){
+        guideJob=null;
+        const iterator=computeDisplayGuide();let next;
+        do{next=iterator.next();}while(!next.done);
+        displayGuideKey=key;return displayGuideCache=next.value;
+      }
       if(!guideJob||guideJob.key!==key)guideJob={key,iterator:computeDisplayGuide()};
       scheduleGuideSlice();return quickGuide();
     }
@@ -2057,7 +2062,10 @@
     const fade=clamp((drop-5*R)/(POCKET_HIDE_DEPTH-5*R),0,1);
     // A slight overhead-camera parallax makes gravity visible. The aperture
     // and shrinking above-lip cap occlude this displacement, even at corners.
-    return {t,sink,x:a.fallX,y:a.fallY,scale:1/(1+drop/(16*R)),alpha:1-fade*fade*(3-2*fade),depth:drop*.62,drop};
+    const pocket=POCKET_GEOMETRY[a.pocket];
+    const ox=pocket.mx-W/2,oy=pocket.my-H/2,olen=Math.hypot(ox,oy)||1;
+    return {t,sink,x:a.fallX,y:a.fallY,scale:1/(1+drop/(10*R)),alpha:1-fade*fade*(3-2*fade),depth:drop*.62,drop,
+      ox:ox/olen,oy:oy/olen,travel:drop*.5};
   }
   function drawPocketFallMask(pocket){
     const profile=pocketFallProfile(pocket),well=worldToScreen(profile.x,profile.y);
@@ -2070,15 +2078,19 @@
   }
   function drawPocketEffect(a){
     const pocket=POCKET_GEOMETRY[a.pocket],pose=pocketAnimationPose(a);
-    const center=worldToScreen(pose.x,pose.y+pose.depth),rr=DISPLAY_R*SCALE*pose.scale;
+    const bx=pose.x+pose.ox*pose.travel,by=pose.y+pose.oy*pose.travel;
+    const center=worldToScreen(bx,by),rr=DISPLAY_R*SCALE*pose.scale;
     ctx.save();const mouth=drawPocketFallMask(pocket);
     ctx.clip();
     ctx.globalAlpha=.28*(1-pose.sink);ctx.fillStyle='#000';ctx.beginPath();ctx.ellipse(center.x,center.y,rr*1.08,rr*.5,0,0,Math.PI*2);ctx.fill();
-    drawBall(a.visual,pose.scale,pose.x,pose.y+pose.depth,pose.alpha,false);
     ctx.globalAlpha=pose.alpha*(.1+.84*pose.sink);
     const shade=ctx.createRadialGradient(center.x-rr*.24,center.y-rr*.28,rr*.08,center.x,center.y,rr*1.08);
     shade.addColorStop(0,'rgba(0,0,0,0)');shade.addColorStop(.58,`rgba(0,0,0,${.14+.32*pose.sink})`);shade.addColorStop(1,'rgba(0,0,0,.97)');
     ctx.fillStyle=shade;ctx.beginPath();ctx.arc(center.x,center.y,rr,0,Math.PI*2);ctx.fill();ctx.restore();
+    ctx.save();
+    if(pose.drop>R*.3)drawPocketFallMask(pocket),ctx.clip();
+    drawBall(a.visual,pose.scale,bx,by,pose.alpha,false);
+    ctx.restore();
     // The part of the ball still above the lip stays visible, but only inside
     // the mouth opening: it may not paint over the cloth or the rail bevel.
     if(pose.drop<R){
