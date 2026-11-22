@@ -29,7 +29,7 @@ https://enzalla.bandcamp.com/track/lullaby
 
 原 `guangyu-intro.mp3`、`guangyu-game-loop.m4a`（用户提供，来源未确认）已从仓库移除，归档在本地非公开目录。现用曲目：
 
-- **Meditation Impromptu 02** — Kevin MacLeod (incompetech.com)，CC BY 4.0。来源：https://incompetech.com/music/royalty-free/mp3-royaltyfree/Meditation%20Impromptu%2002.mp3 。处理：截取 0:00–0:38，1.5 秒淡入、4 秒淡出，转 96 kb/s 立体声 MP3，文件名 `guangyu-intro.mp3`。
-- **Airport Lounge** — Kevin MacLeod (incompetech.com)，CC BY 4.0。来源：https://incompetech.com/music/royalty-free/mp3-royaltyfree/Airport%20Lounge.mp3 。处理：截取 0:15 起的 60 秒，2.5 秒淡入淡出，转 112 kb/s 立体声 MP3，文件名 `guangyu-game-loop.mp3`。
+- **Meditation Impromptu 02** — Kevin MacLeod (incompetech.com)，CC BY 4.0。来源：https://incompetech.com/music/royalty-free/mp3-royaltyfree/Meditation%20Impromptu%2002.mp3 。处理：截取 0:00–0:36，0.35 秒淡入（不做淡出，循环时由播放器交叉淡化），响度归一至 -18 LUFS，转 112 kb/s 立体声 MP3，文件名 `guangyu-intro.mp3`。
+- **Airport Lounge** — Kevin MacLeod (incompetech.com)，CC BY 4.0。来源：https://incompetech.com/music/royalty-free/mp3-royaltyfree/Airport%20Lounge.mp3 。处理：截取 0:15 起的 60 秒，0.3 秒淡入（不做淡出，循环由播放器 0.65 秒交叉淡化衔接），转 112 kb/s 立体声 MP3，文件名 `guangyu-game-loop.mp3`。
 
 许可全文：https://creativecommons.org/licenses/by/4.0/ 。使用时须保留作者署名与许可说明；本仓库已在 README、规则弹窗和本文件中署名。

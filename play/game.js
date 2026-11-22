@@ -110,6 +110,7 @@
     syncPowerUI(); moveSpinDot();
     say('开球：可拖动白球在虚线后摆放，瞄准后拉杆出杆。'+(mode==='nine'?'先碰 1 号球。':''));
     updateUI(); render();
+    saveSnapshot();
   }
   function rackEight(rng) {
     const rackOffsetX=(rng()-.5)*.035,rackOffsetY=(rng()-.5)*.06;
@@ -1125,9 +1126,11 @@
     }
     options.sort((a,b)=>(a.pd+a.distance*.15+a.spread*30)-(b.pd+b.distance*.15+b.spread*30));
     let best=null;
+    const c=cue(),origin={x:c.x,y:c.y};
     for(const o of options.slice(0,12)){
       const targetBall=state.balls.find(b=>b.n===o.target);
       if(!targetBall)continue;
+      c.x=o.x;c.y=o.y;
       const shoot=Math.atan2(targetBall.y-o.y,targetBall.x-o.x);
       for(const power of [48,66,84]){
         const result=simulateAIShot({aim:shoot,power,spinX:0,spinY:0,target:o.target,potTarget:o.pocket,pocket:o.pocket,type:'attack'});
@@ -1137,6 +1140,7 @@
       }
       if(best&&best.score<6)break;
     }
+    c.x=origin.x;c.y=origin.y;
     if(best){cue().x=best.x;cue().y=best.y;return;}
     // Geometric fallback: keep the best pot line even if the simulation misses.
     if(options.length){cue().x=options[0].x;cue().y=options[0].y;return;}
@@ -1375,7 +1379,7 @@
         if(b.vx===0&&b.vy===0&&b.rollVx===0&&b.rollVy===0&&b.spin===0)continue;
         clothStep(b,subdt);
         if(animate){advanceBallOrientation(b,subdt);const speed=Math.hypot(b.rollVx,b.rollVy);if(speed>.01){b.roll+=speed*subdt/R;b.rollHeading=Math.atan2(b.rollVy,b.rollVx);}}
-        const from=_sweepFrom;from.x=b.x;from.y=b.y;
+        const from=_sweepFrom;
         // Near a mouth the jaw is only a fraction of a ball wide; a fast ball can
         // cross it inside one substep. Micro-step only there, so the rest of the
         // table keeps its current cost.
@@ -1384,11 +1388,11 @@
           const travel=Math.sqrt(b.vx*b.vx+b.vy*b.vy)*subdt;micro=Math.max(micro,Math.min(6,Math.ceil(travel/(R*.32))));break;}}
         const microDt=subdt/micro;let fall=null,remainingDt=0;
         for(let m=0;m<micro;m++){
+          from.x=b.x;from.y=b.y;
           b.x+=b.vx*microDt;b.y+=b.vy*microDt;
           const endX=b.x,endY=b.y;
           rails(b);
-          const stepFrom=m===0?from:null;
-          fall=pocketCheck(b,b.x===endX&&b.y===endY?stepFrom:null,microDt);
+          fall=pocketCheck(b,b.x===endX&&b.y===endY?from:null,microDt);
           if(fall){remainingDt=microDt*(micro-m-1);break;}
         }
         if(fall){const remaining=fall.entryRemainder+remainingDt+(subdivisions-sub-1)*subdt;advancePocketFall(fall,remaining);advanceBallOrientation(fall.visual,remaining);}
@@ -2802,7 +2806,7 @@
   syncPowerUI();render();initDiagnostics();initBenchmark();
   {const pending=window.PoolSave&&window.PoolSave.load?window.PoolSave.load():null;
    const resume=$('resumeBtn');
-   if(pending&&resume){resume.hidden=false;resume.addEventListener('click',()=>{tryRestore();},{once:true});}}
+   if(pending&&resume){resume.hidden=false;resume.addEventListener('click',()=>{resume.hidden=true;tryRestore();},{once:true});}}
   window.addEventListener?.('pagehide',saveSnapshot);
   document.addEventListener?.('visibilitychange',()=>{if(document.hidden)saveSnapshot();});
   requestAnimationFrame(frame);window.PoolStartup?.ready('game');
