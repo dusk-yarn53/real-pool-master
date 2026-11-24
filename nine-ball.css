@@ -1,0 +1,4 @@
+/* 2026-11-24 · 九球追分计分 */
+.score.is-points::after{content:"分";font-size:.46em;margin-left:2px;letter-spacing:0;font-weight:600;opacity:.72}
+.result-player small .rack-points{color:#d8f6ff;font-weight:600}
+@media(max-width:700px){.score.is-points::after{font-size:.5em;margin-left:1px}}

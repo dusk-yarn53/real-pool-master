@@ -40,7 +40,7 @@
     }));
     return {index,mx,my,nx,ny,tx,ty,radius,jawRadius,well,faces,fallRadius:radius-R*.45,fallFront:-R*.35};
   });
-  const state = {mode:null,opponent:'ai',aiDifficulty:'normal',aiTicket:0,aiThinking:false,phase:'menu',balls:[],pocketAnimations:[],turn:0,groups:[null,null],scores:[0,0],matchScores:[0,0],returnPage:'difficulty',breaking:true,rackSeed:0,ballInHand:false,repositionAllowed:false,aim:-0.02,power:56,spinX:0,spinY:0,shot:null,stopTime:0,shotTime:0,status:'启动球场，选择对局',winner:null,drag:null};
+  const state = {mode:null,opponent:'ai',aiDifficulty:'normal',aiTicket:0,aiThinking:false,phase:'menu',balls:[],pocketAnimations:[],turn:0,groups:[null,null],scores:[0,0],matchScores:[0,0],points:[0,0],nextBreak:0,rackTurnChanges:0,rackBreak:{player:0,potted:false,nine:false,foul:false},lastRack:null,returnPage:'difficulty',breaking:true,rackSeed:0,ballInHand:false,repositionAllowed:false,aim:-0.02,power:56,spinX:0,spinY:0,shot:null,stopTime:0,shotTime:0,status:'启动球场，选择对局',winner:null,drag:null};
   // Trial shots use the live collision/cloth functions, with isolated events.
   // Never play sounds, emit pocket flashes, or edit the real shot during trials.
   let physicsContext=null;
@@ -95,10 +95,12 @@
     window.PoolAudio?.startGameMusic?.();
     state.practice=null;state.stroke=null;state.windup=0;
     state.aiTicket++;state.aiThinking=false;state.aiPlan=null;
-    if(!rematch)state.matchScores=[0,0];
+    if(!rematch){state.matchScores=[0,0];state.points=[0,0];state.nextBreak=0;}
+    state.lastRack=null;state.rackTurnChanges=0;
     state.returnPage=state.opponent==='ai'?'difficulty':'rules';
     if(!rematch)window.PoolSave?.bumpStats?.({gamesStarted:1,lastMode:mode,lastDifficulty:state.aiDifficulty});
-    state.mode=mode; state.phase='aim'; state.turn=0; state.groups=[null,null]; state.scores=[0,0];
+    state.mode=mode; state.phase='aim'; state.turn=rematch?(state.nextBreak||0):0; state.groups=[null,null]; state.scores=[0,0];
+    state.rackBreak={player:state.turn,potted:false,nine:false,foul:false};
     state.breaking=true; state.ballInHand=false; state.repositionAllowed=true; state.aim=0; state.power=mode==='eight'?88:56; state.spinX=0; state.spinY=0;
     state.shot=null; state.stopTime=0; state.shotTime=0; state.winner=null;
     state.balls=[ball(0,25,mode==='eight'?10:25)];state.aim=mode==='eight'?Math.atan2(15,49):0;state.pocketAnimations=[];state.rackSeed=randomSeed();
@@ -111,6 +113,7 @@
     say('开球：可拖动白球在虚线后摆放，瞄准后拉杆出杆。'+(mode==='nine'?'先碰 1 号球。':''));
     updateUI(); render();
     saveSnapshot();
+    if(state.opponent==='ai'&&state.turn===1)queueAI();
   }
   function rackEight(rng) {
     const rackOffsetX=(rng()-.5)*.035,rackOffsetY=(rng()-.5)*.06;
@@ -131,12 +134,16 @@
     }));
   }
   function updateUI() {
-    $('modeLabel').textContent=state.mode==='nine'?'九球':'八球';
+    const ninePoints=state.mode==='nine'&&!state.practice;
+    $('modeLabel').textContent=ninePoints?'九球追分':state.mode==='nine'?'九球':'八球';
     $('turnLabel').textContent=state.phase==='gameover'?'本局结束':state.phase==='moving'?'球正在运动':`${actor(state.turn)}的回合`;
     for(let i=0;i<2;i++) {
       $('player'+i).classList.toggle('active',i===state.turn);
       $('group'+i).textContent=state.mode==='nine'?'最小号优先':groupName(state.groups[i]);
-      $('score'+i).textContent=state.scores[i];
+      const score=$('score'+i);
+      score.textContent=ninePoints?state.points[i]:state.scores[i];
+      score.classList.toggle('is-points',ninePoints);
+      score.setAttribute('aria-label',ninePoints?`${actor(i)}九球积分 ${state.points[i]} 分`:`${actor(i)}合法进球 ${state.scores[i]}`);
     }
     $('shootBtn').disabled=state.phase!=='aim'||state.ballInHand||(state.opponent==='ai'&&state.turn===1);
     $('placeCueBtn').hidden=!(state.phase==='aim'&&state.repositionAllowed&&!(state.opponent==='ai'&&state.turn===1));
@@ -498,6 +505,7 @@
     const noRail=s.firstHit!==null&&!s.railAfterHit&&objectPots.length===0;
     const foul=scratch||wrongFirst||noRail;
     const foulReason=scratch?'白球落袋':wrongFirst?'未先碰合法目标球':noRail?'碰球后未碰库或落袋':'';
+    if(state.mode==='nine'&&s.breaking)state.rackBreak={player:s.shooter,potted:!foul&&objectPots.length>0,nine:!foul&&nums.includes(9),foul:!!foul};
     // Count the deciding shot before finish() opens the result page. A foul
     // never earns pots; assigned eight-ball groups only credit the own group.
     if(!foul){
@@ -506,12 +514,13 @@
     }
     if(state.mode==='nine'){
       if(nums.includes(9)){
-        if(foul||s.breaking)spotBall(9);
-        else return finish(s.shooter,'合法打进 9 号球');
+        if(foul)spotBall(9);
+        else return finish(s.shooter,s.breaking?'开球 9 号球落袋':'合法打进 9 号球');
       }
       if(foul){state.turn=1-s.shooter;resetCueForHand();say(`${foulReason}，${actor(state.turn)}自由摆球。`);}
       else if(objectPots.length){state.turn=s.shooter;say(`合法进球！${actor(state.turn)}继续。`);}
       else{state.turn=1-s.shooter;say(`未进球，轮到${actor(state.turn)}。`);}
+      if(state.turn!==s.shooter)state.rackTurnChanges++;
     } else {
       const eight=s.pocketed.find(p=>p.n===8);
       if(eight){
@@ -532,22 +541,42 @@
     if(scratch&&!state.ballInHand)resetCueForHand();
     updateUI();render();saveSnapshot();queueAI();
   }
+  // 追分计分：大金 10、小金 7、黄金九 7、普胜 4。
+  // cleared 表示 9 号球是最后一颗球；turnChanges 为 0 才可能形成开球方一杆清台。
+  function nineAward(info,winner,cleared,turnChanges){
+    if(!info)return {key:'normal',name:'普胜',points:4};
+    if(info.nine&&!info.foul)return {key:'golden',name:'黄金九',points:7};
+    if(info.foul)return {key:'normal',name:'普胜',points:4};
+    if(!info.potted)return cleared?{key:'small',name:'小金',points:7}:{key:'normal',name:'普胜',points:4};
+    if(cleared&&winner===info.player&&turnChanges===0)return {key:'big',name:'大金',points:10};
+    if(!cleared&&winner===info.player&&turnChanges===0)return {key:'golden',name:'黄金九',points:7};
+    return {key:'normal',name:'普胜',points:4};
+  }
   function finish(winner,reason) {
     if(state.phase==='gameover')return;
+    const nine=state.mode==='nine';
+    const award=nine?nineAward(state.rackBreak,winner,activeBalls().filter(b=>b.n!==9).length===0,state.rackTurnChanges):null;
+    if(award){state.points[winner]+=award.points;state.lastRack={...award,winner};}
+    state.nextBreak=winner;
     state.winner=winner;state.turn=winner;state.phase='gameover';state.ballInHand=false;state.repositionAllowed=false;
     state.aiTicket++;state.aiThinking=false;state.aiPlan=null;state.matchScores[winner]++;
     window.PoolSave?.bumpStats?.({gamesFinished:1,playerWins:winner===0?1:0,playerLosses:winner===0?0:1});
-    say(`${actor(winner)}获胜 · ${reason}。`);
+    const resultText=award?`${reason} · ${award.name} +${award.points} 分`:reason;
+    say(`${actor(winner)}获胜 · ${resultText}。`);
     updateUI();render();
     for(const id of ['startOverlay','menuOverlay','practiceOverlay','rulesOverlay'])$(id)?.classList.add('hidden');
     $('resultTitle').textContent=`${actor(winner)}获胜`;
-    $('resultReason').textContent=reason;
-    $('resultMode').textContent=(state.mode==='nine'?'九球':'八球')+' · '+(state.opponent==='ai'?'人机对战':'双人同屏');
-    $('resultRack').textContent=`第 ${state.matchScores[0]+state.matchScores[1]} 局结束`;
+    $('resultReason').textContent=resultText;
+    $('resultMode').textContent=(nine?'九球追分':'八球')+' · '+(state.opponent==='ai'?'人机对战':'双人同屏');
+    $('resultRack').textContent=nine&&award?`第 ${state.matchScores[0]+state.matchScores[1]} 局 · ${award.name}`:`第 ${state.matchScores[0]+state.matchScores[1]} 局结束`;
+    $('resultScoreLabel').textContent=nine?'九球追分 · 累计积分':'局数比分';
+    $('resultNote').textContent=nine?'再来一局继续累计积分：大金 10 分 · 小金 7 分 · 黄金九 7 分 · 普胜 4 分。':'再来一局继续累计比分，返回主页开始新的对战。';
     for(let i=0;i<2;i++){
       $('resultName'+i).textContent=actor(i);
-      $('resultWins'+i).textContent=state.matchScores[i];
-      $('resultPots'+i).textContent=state.scores[i];
+      $('resultWins'+i).textContent=nine?state.points[i]:state.matchScores[i];
+      $('resultPotsWrap'+i).innerHTML=nine
+        ?(state.lastRack&&state.lastRack.winner===i?`本局 <strong>+${state.lastRack.points}</strong> · ${state.lastRack.name}`:'本局 <strong>+0</strong>')
+        :`本局合法进球 <strong>${state.scores[i]}</strong>`;
       $('resultPlayer'+i).classList.toggle('is-winner',i===winner);
     }
     document.body?.setAttribute('data-screen','result');
@@ -2465,7 +2494,7 @@
     document.body?.setAttribute('data-screen','setup');updateUI();
   }
   function returnHome(){
-    leaveTable();state.practice=null;state.matchScores=[0,0];
+    leaveTable();state.practice=null;state.matchScores=[0,0];state.points=[0,0];state.nextBreak=0;state.lastRack=null;state.rackTurnChanges=0;
     $('menuOverlay').classList.add('hidden');$('startOverlay').classList.remove('hidden');
     document.body?.setAttribute('data-screen','welcome');$('startBtn').focus?.();
   }
@@ -2706,10 +2735,10 @@
   if(window.ResizeObserver)new window.ResizeObserver(()=>requestAnimationFrame(resizeRenderBuffer)).observe(canvas);
   requestAnimationFrame(resizeRenderBuffer);
   window.advanceTime=ms=>{manualTime=true;acc=0;const steps=Math.ceil(ms/1000/STEP);for(let i=0;i<steps;i++)update(STEP);render();};
-  window.render_game_to_text=()=>JSON.stringify({coordinates:`world inches, origin at top-left cushion nose; +x right, +y down; table 100x50; ball diameter ${(2*R).toFixed(4)}; corner mouth ${CORNER_MOUTH}; side mouth ${SIDE_MOUTH}`,mode:state.mode,opponent:state.opponent,aiDifficulty:state.aiDifficulty,aiThinking:state.aiThinking,aiPlan:state.aiPlan?{target:state.aiPlan.target,pocket:state.aiPlan.pocket,type:state.aiPlan.type,spinX:state.aiPlan.spinX||0,spinY:state.aiPlan.spinY||0,snookerPlanned:!!state.aiPlan.snookerPlanned,power:+state.aiPlan.power.toFixed(1),description:state.aiPlan.description}:null,phase:state.phase,turn:state.turn+1,groups:state.groups,scores:state.scores,matchScores:state.matchScores,returnPage:state.returnPage,breaking:state.breaking,rackSeed:state.rackSeed,ballInHand:state.ballInHand,repositionAllowed:state.repositionAllowed,aimDegrees:+(state.aim*180/Math.PI).toFixed(2),power:state.power,spin:[+state.spinX.toFixed(2),+state.spinY.toFixed(2)],balls:state.balls.map(b=>({n:b.n,x:+b.x.toFixed(2),y:+b.y.toFixed(2),vx:+b.vx.toFixed(2),vy:+b.vy.toFixed(2),rollVx:+b.rollVx.toFixed(2),rollVy:+b.rollVy.toFixed(2),sideSpin:+b.spin.toFixed(2),roll:+b.roll.toFixed(2),pocketed:b.pocketed})),status:state.status,winner:state.winner});
+  window.render_game_to_text=()=>JSON.stringify({coordinates:`world inches, origin at top-left cushion nose; +x right, +y down; table 100x50; ball diameter ${(2*R).toFixed(4)}; corner mouth ${CORNER_MOUTH}; side mouth ${SIDE_MOUTH}`,mode:state.mode,opponent:state.opponent,aiDifficulty:state.aiDifficulty,aiThinking:state.aiThinking,aiPlan:state.aiPlan?{target:state.aiPlan.target,pocket:state.aiPlan.pocket,type:state.aiPlan.type,spinX:state.aiPlan.spinX||0,spinY:state.aiPlan.spinY||0,snookerPlanned:!!state.aiPlan.snookerPlanned,power:+state.aiPlan.power.toFixed(1),description:state.aiPlan.description}:null,phase:state.phase,turn:state.turn+1,groups:state.groups,scores:state.scores,matchScores:state.matchScores,points:state.points,lastRack:state.lastRack,returnPage:state.returnPage,breaking:state.breaking,rackSeed:state.rackSeed,ballInHand:state.ballInHand,repositionAllowed:state.repositionAllowed,aimDegrees:+(state.aim*180/Math.PI).toFixed(2),power:state.power,spin:[+state.spinX.toFixed(2),+state.spinY.toFixed(2)],balls:state.balls.map(b=>({n:b.n,x:+b.x.toFixed(2),y:+b.y.toFixed(2),vx:+b.vx.toFixed(2),vy:+b.vy.toFixed(2),rollVx:+b.rollVx.toFixed(2),rollVy:+b.rollVy.toFixed(2),sideSpin:+b.spin.toFixed(2),roll:+b.roll.toFixed(2),pocketed:b.pocketed})),status:state.status,winner:state.winner});
   if((!location.hostname||['localhost','127.0.0.1','[::1]'].includes(location.hostname))&&new URLSearchParams(location.search).has('test')){
     $('startOverlay').classList.add('hidden');$('menuOverlay').classList.remove('hidden');
-    window.__poolTest={getBallStates(){return state.balls.map(b=>({...b,q:[...b.q]}));},sampleFall(index,x,y,vx,vy,age){const a=makePocketFall(Object.assign(ball(1,x,y),{vx,vy,rollVx:vx,rollVy:vy}),index);advancePocketFall(a,age);advanceBallOrientation(a.visual,age);return {...pocketAnimationPose(a),vx:a.fallVx,vy:a.fallVy,q:[...a.visual.q]};},launchBall(power,aim,side=0){const b=ball(0,50,25);applyCueImpulse(b,power,aim,side,0,false);return b;},railTest(b,nx,ny){const copy={...b};railHit(copy,nx,ny);return copy;},strokeName,assessAttack:attackRisk,simulateShot:simulateAIShot,masterStrokeCost,getRenderInfo(){return {ratio:PIXEL_RATIO,resolutionScale,renderCostEMA,textureSize:BALL_SPRITE_SIZE,width:canvas.width,height:canvas.height,physicsHz:1/STEP,displayRefresh:"native",partialRestore:true};},getPocketGeometry(){return POCKET_GEOMETRY.map(p=>({...p,well:{...p.well}}));},getShotSummary(){return {firstHit:state.shot?.firstHit??null,pocketed:state.shot?.pocketed||[]};},getFallAnimations(){return state.pocketAnimations.map(a=>({n:a.visual.n,pocket:a.pocket,age:a.age,duration:a.duration,entryX:a.entryX,entryY:a.entryY,vx:a.vx,vy:a.vy,...pocketAnimationPose(a),q:[...a.visual.q]}));},pocketRollingTest(index=1,angleDegrees=0,speed=6,offMouth=false){
+    window.__poolTest={nineAward,getNineScore(){return {points:[...state.points],matchScores:[...state.matchScores],lastRack:state.lastRack?{...state.lastRack}:null,rackBreak:{...state.rackBreak},turnChanges:state.rackTurnChanges,turn:state.turn,breaking:state.breaking};},getBallStates(){return state.balls.map(b=>({...b,q:[...b.q]}));},sampleFall(index,x,y,vx,vy,age){const a=makePocketFall(Object.assign(ball(1,x,y),{vx,vy,rollVx:vx,rollVy:vy}),index);advancePocketFall(a,age);advanceBallOrientation(a.visual,age);return {...pocketAnimationPose(a),vx:a.fallVx,vy:a.fallVy,q:[...a.visual.q]};},launchBall(power,aim,side=0){const b=ball(0,50,25);applyCueImpulse(b,power,aim,side,0,false);return b;},railTest(b,nx,ny){const copy={...b};railHit(copy,nx,ny);return copy;},strokeName,assessAttack:attackRisk,simulateShot:simulateAIShot,masterStrokeCost,getRenderInfo(){return {ratio:PIXEL_RATIO,resolutionScale,renderCostEMA,textureSize:BALL_SPRITE_SIZE,width:canvas.width,height:canvas.height,physicsHz:1/STEP,displayRefresh:"native",partialRestore:true};},getPocketGeometry(){return POCKET_GEOMETRY.map(p=>({...p,well:{...p.well}}));},getShotSummary(){return {firstHit:state.shot?.firstHit??null,pocketed:state.shot?.pocketed||[]};},getFallAnimations(){return state.pocketAnimations.map(a=>({n:a.visual.n,pocket:a.pocket,age:a.age,duration:a.duration,entryX:a.entryX,entryY:a.entryY,vx:a.vx,vy:a.vy,...pocketAnimationPose(a),q:[...a.visual.q]}));},pocketRollingTest(index=1,angleDegrees=0,speed=6,offMouth=false){
       const p=POCKET_GEOMETRY[index],angle=angleDegrees*Math.PI/180;
       const dx=p.nx*Math.cos(angle)+p.tx*Math.sin(angle),dy=p.ny*Math.cos(angle)+p.ty*Math.sin(angle);
       const distance=Math.min(8,speed*speed/(2*ROLL_DECEL)*.7),offset=offMouth?p.radius+1.4:0;
@@ -2753,8 +2782,16 @@
     state.spinX=0;state.spinY=-.85;$('player2Name').textContent='玩家 2';syncPowerUI();moveSpinDot();$('menuOverlay').classList.add('hidden');updateUI();render();
   },setNineFinal(){
     state.pocketAnimations=[];
-    state.aiTicket++;state.aiThinking=false;state.aiPlan=null;state.mode='nine';state.opponent='local';state.phase='aim';state.turn=0;state.breaking=false;state.ballInHand=false;state.groups=[null,null];state.scores=[8,0];state.balls=[ball(0,50,22),ball(9,50,8)];state.aim=-Math.PI/2;state.power=56;state.shot=null;
+    state.aiTicket++;state.aiThinking=false;state.aiPlan=null;state.mode='nine';state.opponent='local';state.phase='aim';state.turn=0;state.breaking=false;state.ballInHand=false;state.groups=[null,null];state.scores=[8,0];state.balls=[ball(0,50,22),ball(9,50,8)];state.aim=-Math.PI/2;state.power=56;state.shot=null;state.rackTurnChanges=0;state.rackBreak={player:0,potted:false,nine:false,foul:false};
     state.spinX=0;state.spinY=-.85;$('player2Name').textContent='玩家 2';syncPowerUI();moveSpinDot();$('menuOverlay').classList.add('hidden');updateUI();render();
+  },setNineAwardFixture(opts={}){
+    state.pocketAnimations=[];state.aiTicket++;state.aiThinking=false;state.aiPlan=null;
+    state.mode='nine';state.opponent='local';state.phase='aim';state.turn=0;state.breaking=false;state.ballInHand=false;state.groups=[null,null];
+    state.scores=[8,0];state.points=[0,0];state.matchScores=[0,0];state.lastRack=null;state.nextBreak=0;state.winner=null;
+    state.balls=[ball(0,50,22),ball(9,50,8)];if(opts.cleared===false)state.balls.push(ball(1,20,42));
+    state.aim=-Math.PI/2;state.power=56;state.spinX=0;state.spinY=-.85;state.shot=null;
+    state.rackBreak={player:0,potted:false,nine:false,foul:false,...(opts.info||{})};state.rackTurnChanges=opts.turnChanges||0;
+    $('menuOverlay').classList.add('hidden');$('player2Name').textContent='玩家 2';syncPowerUI();moveSpinDot();updateUI();render();
   }};}
   function saveSnapshot(){
     try{
@@ -2762,7 +2799,7 @@
       if(!api||api.available===false||state.phase!=='aim'||state.practice||!state.balls.length)return;
       api.save({slot:`${state.mode}:${state.opponent}:${state.aiDifficulty}`,mode:state.mode,opponent:state.opponent,difficulty:state.aiDifficulty,
         balls:state.balls.map(b=>({n:b.n,x:+b.x.toFixed(3),y:+b.y.toFixed(3),pocketed:!!b.pocketed})),
-        turn:state.turn,groups:[...state.groups],scores:[...state.scores],matchScores:[...state.matchScores],
+        turn:state.turn,groups:[...state.groups],scores:[...state.scores],matchScores:[...state.matchScores],points:[...state.points],nextBreak:state.nextBreak,rackTurnChanges:state.rackTurnChanges,rackBreak:{...state.rackBreak},
         breaking:!!state.breaking,ballInHand:!!state.ballInHand,aim:state.aim,power:state.power,rackSeed:state.rackSeed});
     }catch(e){}
   }
@@ -2781,7 +2818,7 @@
       state.aiDifficulty=snap.difficulty||'normal';
       state.balls=snap.balls.map(b=>Object.assign(ball(b.n,b.x,b.y),{pocketed:!!b.pocketed}));
       state.turn=snap.turn|0;state.groups=snap.groups||[null,null];state.scores=snap.scores||[0,0];
-      state.matchScores=snap.matchScores||[0,0];state.breaking=!!snap.breaking;state.ballInHand=!!snap.ballInHand;
+      state.matchScores=snap.matchScores||[0,0];state.points=snap.points||[0,0];state.nextBreak=snap.nextBreak|0;state.rackTurnChanges=snap.rackTurnChanges|0;state.rackBreak=snap.rackBreak||{player:state.turn,potted:false,nine:false,foul:false};state.lastRack=null;state.breaking=!!snap.breaking;state.ballInHand=!!snap.ballInHand;
       state.aim=Number.isFinite(snap.aim)?snap.aim:0;state.power=Number.isFinite(snap.power)?snap.power:56;
       state.rackSeed=snap.rackSeed||state.rackSeed;state.phase='aim';state.shot=null;state.stroke=null;
       state.pocketAnimations=[];state.winner=null;state.practice=null;state.repositionAllowed=!!snap.ballInHand;

@@ -22,12 +22,14 @@ for(const mode of ['ai','local','practice']){
 for(const kind of ['Eight','Nine']){
   const g=loadGame(),w=g.window,c=controls(g);c.id('startBtn');c.data('flowMode','local');c.data('flowRules',kind.toLowerCase());
   w.__poolTest['set'+kind+'Final']();w.__poolTest.fireTest();w.advanceTime(15000);
-  let s=state(w);assert.equal(s.phase,'gameover');assert.equal(s.scores[0],kind==='Eight'?8:9);assert.deepEqual(s.matchScores,[1,0]);
-  assert(!g.ids.get('resultOverlay').classList.contains('hidden'));assert.equal(g.ids.get('resultWins0').textContent,1);
-  const oldSeed=s.rackSeed;c.id('resultReplay');s=state(w);assert.equal(s.phase,'aim');assert.equal(s.opponent,'local');assert.equal(s.returnPage,'rules');assert.deepEqual(s.scores,[0,0]);assert.deepEqual(s.matchScores,[1,0]);assert.notEqual(s.rackSeed,oldSeed);
-  w.__poolTest['set'+kind+'Final']();w.__poolTest.fireTest();w.advanceTime(15000);assert.deepEqual(state(w).matchScores,[2,0]);
+  const nine=kind==='Nine';
+  let s=state(w);assert.equal(s.phase,'gameover');assert.equal(s.scores[0],nine?9:8);assert.deepEqual(s.matchScores,[1,0]);
+  assert(!g.ids.get('resultOverlay').classList.contains('hidden'));assert.equal(g.ids.get('resultWins0').textContent,nine?7:1);
+  assert.deepEqual(s.points,nine?[7,0]:[0,0]);if(nine)assert.equal(g.ids.get('resultReason').textContent.includes('小金'),true);
+  const oldSeed=s.rackSeed;c.id('resultReplay');s=state(w);assert.equal(s.phase,'aim');assert.equal(s.opponent,'local');assert.equal(s.returnPage,'rules');assert.deepEqual(s.scores,[0,0]);assert.deepEqual(s.matchScores,[1,0]);assert.deepEqual(s.points,nine?[7,0]:[0,0]);assert.notEqual(s.rackSeed,oldSeed);
+  w.__poolTest['set'+kind+'Final']();w.__poolTest.fireTest();w.advanceTime(15000);assert.deepEqual(state(w).matchScores,[2,0]);assert.deepEqual(state(w).points,nine?[14,0]:[0,0]);
   w.advanceTime(2000);assert.deepEqual(state(w).matchScores,[2,0],'winner counted twice');
-  c.id('resultHome');assert.deepEqual(state(w).matchScores,[0,0]);assert(!g.ids.get('startOverlay').classList.contains('hidden'));
+  c.id('resultHome');assert.deepEqual(state(w).matchScores,[0,0]);assert.deepEqual(state(w).points,[0,0]);assert(!g.ids.get('startOverlay').classList.contains('hidden'));
 }
 const g=loadGame();g.window.__poolTest.setEightFinal(false);g.window.__poolTest.fireTest();g.window.advanceTime(15000);
 assert.equal(state(g.window).winner,1);assert.deepEqual(state(g.window).matchScores,[0,1]);assert.deepEqual(state(g.window).scores,[0,0]);
