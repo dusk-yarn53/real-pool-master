@@ -1,4 +1,4 @@
-const CACHE='fuguang-pool-20261124-nine-score-v1';
+const CACHE='fuguang-pool-20261124-guide-v1';
 const CORE=['./','./index.html','./site.css','./game.js','./persist.js','./audio.js','./mobile.js','./assets/fuguang-arena.jpg','./assets/icons/app-icon-192.png','./assets/icons/app-icon-512.png','./play/','./play/index.html','./play/site.css','./play/game.js','./play/persist.js','./play/audio.js','./play/mobile.js','./play/manifest.webmanifest','./play/assets/fuguang-arena.jpg','./play/assets/icons/app-icon-192.png','./play/assets/icons/app-icon-512.png'];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>Promise.all(CORE.map(url=>cache.add(url).catch(()=>null)))).then(()=>self.skipWaiting())));
 self.addEventListener('activate',event=>event.waitUntil(Promise.all([caches.keys().then(keys=>Promise.all(keys.filter(key=>key!==CACHE).map(key=>caches.delete(key)))),self.clients.claim()])));

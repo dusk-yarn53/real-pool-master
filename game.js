@@ -1492,7 +1492,7 @@
   function runGuideSlice(){
     guideTimerPending=false;
     const job=guideJob;
-    if(!job||job.key!==guideKey()||state.phase!=='aim'||guideDragging()||heldGuide){guideJob=null;return;}
+    if(!job||job.key!==guideKey()||state.phase!=='aim'||heldGuide){guideJob=null;return;}
     const start=performance.now();let next;
     do{next=job.iterator.next();}while(!next.done&&performance.now()-start<.75);
     if(next.done){displayGuideKey=job.key;displayGuideCache=next.value;guideJob=null;requestAimFrame();}
@@ -1560,6 +1560,9 @@
     if(key===displayGuideKey)return displayGuideCache;
     if(interactive){
       if(guideDragging()){
+        // The full guide now uses the exact analytic ghost-ball contact for
+        // direct shots, so it no longer snaps by a 1/180s step during a slow
+        // drag. Keep the full collision guide while the finger is down.
         guideJob=null;
         const iterator=computeDisplayGuide();let next;
         do{next=iterator.next();}while(!next.done);
@@ -1576,6 +1579,11 @@
     const guidePower=state.power,guideAim=state.aim,guideSpinX=state.spinX,guideSpinY=state.spinY,guideBreaking=state.breaking;
     const liveCue=cue();if(!liveCue)return null;
     const balls=state.balls.map(b=>({...b,q:[...b.q]})),c=balls.find(b=>b.n===0);
+    const c0={x:c.x,y:c.y};
+    const spinLength=Math.hypot(guideSpinX,guideSpinY);
+    const shotAngle=guideAim-(spinLength?guideSpinX/spinLength:0)*.018;
+    const shotDir={x:Math.cos(shotAngle),y:Math.sin(shotAngle)};
+    let targetPre=null;
     const previous=physicsContext,events={firstHit:null,pocketed:[],railAfterHit:false,breakRails:new Set(),captureContacts:true,contacts:[],cushionHits:[]};
     const shotPath=[{x:c.x,y:c.y}],cuePath=[],targetPath=[];
     const point=(path,x,y,force=false)=>{const last=path.at(-1);if(force||!last||Math.hypot(x-last.x,y-last.y)>.025)path.push({x,y});};
@@ -1598,6 +1606,8 @@
           if(preRails)break;
           if(events.firstHit!==null){
             target=balls.find(b=>b.n===events.firstHit);contact=events.contacts.find(e=>e.a===0||e.b===0);
+            const preBall=state.balls.find(b=>b.n===events.firstHit);
+            if(preBall)targetPre={x:preBall.x,y:preBall.y};
             const cueContact=contact?(contact.a===0?contact.afterA:contact.afterB):c;
             const targetContact=contact?(contact.a===0?contact.afterB:contact.afterA):target;
             if(!shotGuideDone)point(shotPath,cueContact.x,cueContact.y,true);
@@ -1638,7 +1648,21 @@
       }
     }
     if(target){if(!cueDone&&!cueGuideDone)point(cuePath,c.x,c.y,true);if(!targetDone&&!targetGuideDone)point(targetPath,target.x,target.y,true);}
-    const objectCenter=target?(contact?(contact.a===0?contact.afterB:contact.afterA):target):null;
+    let objectCenter=target?(contact?(contact.a===0?contact.afterB:contact.afterA):target):null;
+    // Replace the stepped physics contact with the exact analytic ghost-ball
+    // contact for direct shots. The contact step is quantized to 1/180s, which
+    // made the endpoint jump ~0.25in for a 0.001rad drag.
+    if(target&&preRails===0&&targetPre){
+      const ray=firstBallOnRay(c0.x,c0.y,shotDir.x,shotDir.y,[0]);
+      if(ray.ball&&ray.ball.n===target.n){
+        const cc={x:c0.x+shotDir.x*ray.distance,y:c0.y+shotDir.y*ray.distance};
+        const tc={x:targetPre.x,y:targetPre.y};
+        if(shotPath.length)shotPath[shotPath.length-1]=cc;else shotPath.push(cc);
+        if(cuePath.length)cuePath[0]=cc;else cuePath.push(cc);
+        if(targetPath.length)targetPath[0]=tc;else targetPath.push(tc);
+        objectCenter=tc;
+      }
+    }
     // The guide ends at the first cushion. Keep the later physics trial only
     // for internal reachability; never draw a rebound segment after a rail.
     const directTarget=target&&preRails===0;
@@ -2738,7 +2762,7 @@
   window.render_game_to_text=()=>JSON.stringify({coordinates:`world inches, origin at top-left cushion nose; +x right, +y down; table 100x50; ball diameter ${(2*R).toFixed(4)}; corner mouth ${CORNER_MOUTH}; side mouth ${SIDE_MOUTH}`,mode:state.mode,opponent:state.opponent,aiDifficulty:state.aiDifficulty,aiThinking:state.aiThinking,aiPlan:state.aiPlan?{target:state.aiPlan.target,pocket:state.aiPlan.pocket,type:state.aiPlan.type,spinX:state.aiPlan.spinX||0,spinY:state.aiPlan.spinY||0,snookerPlanned:!!state.aiPlan.snookerPlanned,power:+state.aiPlan.power.toFixed(1),description:state.aiPlan.description}:null,phase:state.phase,turn:state.turn+1,groups:state.groups,scores:state.scores,matchScores:state.matchScores,points:state.points,lastRack:state.lastRack,returnPage:state.returnPage,breaking:state.breaking,rackSeed:state.rackSeed,ballInHand:state.ballInHand,repositionAllowed:state.repositionAllowed,aimDegrees:+(state.aim*180/Math.PI).toFixed(2),power:state.power,spin:[+state.spinX.toFixed(2),+state.spinY.toFixed(2)],balls:state.balls.map(b=>({n:b.n,x:+b.x.toFixed(2),y:+b.y.toFixed(2),vx:+b.vx.toFixed(2),vy:+b.vy.toFixed(2),rollVx:+b.rollVx.toFixed(2),rollVy:+b.rollVy.toFixed(2),sideSpin:+b.spin.toFixed(2),roll:+b.roll.toFixed(2),pocketed:b.pocketed})),status:state.status,winner:state.winner});
   if((!location.hostname||['localhost','127.0.0.1','[::1]'].includes(location.hostname))&&new URLSearchParams(location.search).has('test')){
     $('startOverlay').classList.add('hidden');$('menuOverlay').classList.remove('hidden');
-    window.__poolTest={nineAward,getNineScore(){return {points:[...state.points],matchScores:[...state.matchScores],lastRack:state.lastRack?{...state.lastRack}:null,rackBreak:{...state.rackBreak},turnChanges:state.rackTurnChanges,turn:state.turn,breaking:state.breaking};},getBallStates(){return state.balls.map(b=>({...b,q:[...b.q]}));},sampleFall(index,x,y,vx,vy,age){const a=makePocketFall(Object.assign(ball(1,x,y),{vx,vy,rollVx:vx,rollVy:vy}),index);advancePocketFall(a,age);advanceBallOrientation(a.visual,age);return {...pocketAnimationPose(a),vx:a.fallVx,vy:a.fallVy,q:[...a.visual.q]};},launchBall(power,aim,side=0){const b=ball(0,50,25);applyCueImpulse(b,power,aim,side,0,false);return b;},railTest(b,nx,ny){const copy={...b};railHit(copy,nx,ny);return copy;},strokeName,assessAttack:attackRisk,simulateShot:simulateAIShot,masterStrokeCost,getRenderInfo(){return {ratio:PIXEL_RATIO,resolutionScale,renderCostEMA,textureSize:BALL_SPRITE_SIZE,width:canvas.width,height:canvas.height,physicsHz:1/STEP,displayRefresh:"native",partialRestore:true};},getPocketGeometry(){return POCKET_GEOMETRY.map(p=>({...p,well:{...p.well}}));},getShotSummary(){return {firstHit:state.shot?.firstHit??null,pocketed:state.shot?.pocketed||[]};},getFallAnimations(){return state.pocketAnimations.map(a=>({n:a.visual.n,pocket:a.pocket,age:a.age,duration:a.duration,entryX:a.entryX,entryY:a.entryY,vx:a.vx,vy:a.vy,...pocketAnimationPose(a),q:[...a.visual.q]}));},pocketRollingTest(index=1,angleDegrees=0,speed=6,offMouth=false){
+    window.__poolTest={nineAward,getQuickGuide(){return quickGuide();},getAimGuide(){return displayGuide(true);},getNineScore(){return {points:[...state.points],matchScores:[...state.matchScores],lastRack:state.lastRack?{...state.lastRack}:null,rackBreak:{...state.rackBreak},turnChanges:state.rackTurnChanges,turn:state.turn,breaking:state.breaking};},getBallStates(){return state.balls.map(b=>({...b,q:[...b.q]}));},sampleFall(index,x,y,vx,vy,age){const a=makePocketFall(Object.assign(ball(1,x,y),{vx,vy,rollVx:vx,rollVy:vy}),index);advancePocketFall(a,age);advanceBallOrientation(a.visual,age);return {...pocketAnimationPose(a),vx:a.fallVx,vy:a.fallVy,q:[...a.visual.q]};},launchBall(power,aim,side=0){const b=ball(0,50,25);applyCueImpulse(b,power,aim,side,0,false);return b;},railTest(b,nx,ny){const copy={...b};railHit(copy,nx,ny);return copy;},strokeName,assessAttack:attackRisk,simulateShot:simulateAIShot,masterStrokeCost,getRenderInfo(){return {ratio:PIXEL_RATIO,resolutionScale,renderCostEMA,textureSize:BALL_SPRITE_SIZE,width:canvas.width,height:canvas.height,physicsHz:1/STEP,displayRefresh:"native",partialRestore:true};},getPocketGeometry(){return POCKET_GEOMETRY.map(p=>({...p,well:{...p.well}}));},getShotSummary(){return {firstHit:state.shot?.firstHit??null,pocketed:state.shot?.pocketed||[]};},getFallAnimations(){return state.pocketAnimations.map(a=>({n:a.visual.n,pocket:a.pocket,age:a.age,duration:a.duration,entryX:a.entryX,entryY:a.entryY,vx:a.vx,vy:a.vy,...pocketAnimationPose(a),q:[...a.visual.q]}));},pocketRollingTest(index=1,angleDegrees=0,speed=6,offMouth=false){
       const p=POCKET_GEOMETRY[index],angle=angleDegrees*Math.PI/180;
       const dx=p.nx*Math.cos(angle)+p.tx*Math.sin(angle),dy=p.ny*Math.cos(angle)+p.ty*Math.sin(angle);
       const distance=Math.min(8,speed*speed/(2*ROLL_DECEL)*.7),offset=offMouth?p.radius+1.4:0;

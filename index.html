@@ -376,7 +376,7 @@ html,body{margin:0;background:#040b17;color:#e7f7ff;font-family:system-ui,"PingF
   const retryEngine=()=>{
     if(!engineFailed||tasks.has('game'))return;
     engineFailed=false;status.textContent='正在重新连接比赛引擎';skip.textContent='继续等待';
-    const old=$('gameEngine'),script=document.createElement('script');script.id='gameEngine';script.async=true;script.src='./game.js?v=20261124-nine-score1&retry='+String(++engineRetry);script.onerror=failEngine;old?.remove();document.body.appendChild(script);
+    const old=$('gameEngine'),script=document.createElement('script');script.id='gameEngine';script.async=true;script.src='./game.js?v=20261124-guide1&retry='+String(++engineRetry);script.onerror=failEngine;old?.remove();document.body.appendChild(script);
   };
   window.PoolStartup={ready,engineFailed:failEngine,styleFailed};
   const stylesheet=$('siteStyle');if(stylesheet?.sheet)ready('styles');else if(stylesheet?.dataset?.failed==='true')styleFailed();
@@ -397,7 +397,7 @@ html,body{margin:0;background:#040b17;color:#e7f7ff;font-family:system-ui,"PingF
 </script>
   <!-- STARTUP_SCRIPT_END -->
   <script src="./persist.js?v=20261122-save1"></script>
-<script id="gameEngine" async src="./game.js?v=20261124-nine-score1" onerror="window.PoolStartup.engineFailed()"></script>
+<script id="gameEngine" async src="./game.js?v=20261124-guide1" onerror="window.PoolStartup.engineFailed()"></script>
   <script async src="./audio.js?v=20261024-original-intro-v5"></script>
   <script async src="./mobile.js?v=20261024-original-intro-v5"></script>
   <script>if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register((/\/play\/?$/.test(location.pathname)?'../':'./')+'sw.js').catch(()=>{}),{once:true});</script>
